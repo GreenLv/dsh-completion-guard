@@ -96,6 +96,30 @@ export function createGitFixture(parent, label) {
   return { work, remote, snapshot }
 }
 
+/** Local-only native Git service; permission is scoped to this fixture repo. */
+export function createGitExtFixture(parent, label) {
+  const fixture = createGitFixture(parent, label)
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8',
+    timeout: 15000, maxBuffer: 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  const remotePath = fixture.remote.replaceAll('\\', '/')
+  assert.ok(isAbsolute(fixture.remote) && !/[\r\n\t]/.test(remotePath))
+  const url = `ext::git %s ${remotePath.replaceAll('%', '%%').replaceAll(' ', '% ')}`
+  git(fixture.work, 'config', '--local', 'protocol.ext.allow', 'always')
+  git(fixture.work, 'remote', 'set-url', 'origin', url)
+  const snapshot = () => {
+    assert.equal(git(fixture.work, 'remote', 'get-url', 'origin'), url, 'ext remote drift')
+    assert.equal(git(fixture.work, 'config', '--local', '--get-all', 'protocol.ext.allow'), 'always', 'ext policy drift')
+    return { head: git(fixture.work, 'rev-parse', 'HEAD'), index: git(fixture.work, 'write-tree'),
+      branch: git(fixture.work, 'symbolic-ref', '--short', 'HEAD'),
+      remote: git(parent, '--git-dir', fixture.remote, 'for-each-ref', '--format=%(objectname)', 'refs/heads/main') || null }
+  }
+  return { ...fixture, snapshot }
+}
+
+export function createIncidentGitFixture(parent, label, platform = process.platform) {
+  return platform === 'win32' ? createGitExtFixture(parent, label) : createGitFixture(parent, label)
+}
+
 export async function runGitIncident(api, config) {
   const output = incidentPath(config, 'archive043')
   const parent = join(config.workRoot, 'archive043-' + config.nonce)
@@ -104,7 +128,7 @@ export async function runGitIncident(api, config) {
     const facts = { case: 'archive043', compound_reason: '', commit_reason: '', push_reason: '',
       ordinary_action_reason: '', missing_effect_reason: '', refs_verified: false, persisted_reopen: false }
     for (const label of ['compound', 'independent']) {
-      const fixture = (api.createGitFixture ?? createGitFixture)(parent, label)
+      const fixture = (api.createGitFixture ?? createIncidentGitFixture)(parent, label)
       const session = 'archive043-' + label
       await api.open(session)
       const authorization = `Commit changes in repository ${fixture.work}. Push repository ${fixture.work} remote origin refspec refs/heads/main:refs/heads/main.`

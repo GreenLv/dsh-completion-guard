@@ -413,6 +413,202 @@ class HostBoundEntrypointTests(unittest.TestCase):
         cls.host = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.host)
 
+    @unittest.skipUnless(os.name == 'nt', 'Windows Git objects carry the readonly attribute')
+    def test_owned_readonly_git_object_is_removed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'owned'
+            root.mkdir()
+            subprocess.run(['git', 'init', '-q', str(root / 'repo')], check=True, capture_output=True)
+            oid = subprocess.run(['git', '-C', str(root / 'repo'), 'hash-object', '-w', '--stdin'],
+                                 input=b'owned object', check=True, capture_output=True).stdout.decode().strip()
+            obj = root / 'repo' / '.git' / 'objects' / oid[:2] / oid[2:]
+            bare = root / 'remote.git'
+            subprocess.run(['git', 'init', '--bare', '-q', str(bare)], check=True, capture_output=True)
+            bare_oid = subprocess.run(['git', '--git-dir', str(bare), 'hash-object', '-w', '--stdin'],
+                                      input=b'owned bare object', check=True, capture_output=True).stdout.decode().strip()
+            bare_obj = bare / 'objects' / bare_oid[:2] / bare_oid[2:]
+            self.assertTrue(obj.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+            self.assertTrue(bare_obj.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+            try:
+                self.host.remove_owned_host_temporary(root)
+                self.assertFalse(root.exists())
+            finally:
+                if obj.exists():
+                    os.chmod(obj, stat.S_IWRITE)
+                if bare_obj.exists():
+                    os.chmod(bare_obj, stat.S_IWRITE)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows Git objects carry the readonly attribute')
+    def test_bare_git_structure_registered_before_refs_are_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'owned'
+            bare = root / 'remote.git'
+            (bare / 'refs' / 'heads').mkdir(parents=True)
+            (bare / 'refs' / 'tags').mkdir()
+            (bare / 'objects' / 'info').mkdir(parents=True)
+            (bare / 'objects' / 'pack').mkdir()
+            (bare / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf8')
+            (bare / 'config').write_text('[core]\n  repositoryformatversion = 0\n  bare = true\n', encoding='utf8')
+            oid = subprocess.run(['git', '--git-dir', str(bare), 'hash-object', '-w', '--stdin'],
+                                 input=b'refs created first', check=True, capture_output=True).stdout.decode().strip()
+            obj = bare / 'objects' / oid[:2] / oid[2:]
+            self.assertTrue(obj.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+            try:
+                self.host.remove_owned_host_temporary(root)
+                self.assertFalse(root.exists())
+            finally:
+                if obj.exists():
+                    os.chmod(obj, stat.S_IWRITE)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows readonly attributes and hardlinks')
+    def test_cleanup_refuses_readonly_git_object_with_external_hardlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'owned'
+            root.mkdir()
+            repo = root / 'repo'
+            subprocess.run(['git', 'init', '-q', str(repo)], check=True, capture_output=True)
+            oid = subprocess.run(['git', '-C', str(repo), 'hash-object', '-w', '--stdin'],
+                                 input=b'hardlink boundary', check=True, capture_output=True).stdout.decode().strip()
+            obj = repo / '.git' / 'objects' / oid[:2] / oid[2:]
+            alias = Path(directory) / 'outside-alias'
+            os.link(obj, alias)
+            try:
+                before = alias.read_bytes()
+                self.assertEqual(obj.lstat().st_nlink, 2)
+                self.assertTrue(alias.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+                with self.assertRaises(PermissionError):
+                    self.host.remove_owned_host_temporary(root)
+                self.assertTrue(root.exists())
+                self.assertEqual(alias.read_bytes(), before)
+                self.assertTrue(alias.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+                self.assertTrue(obj.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+            finally:
+                # Both paths are test-owned; release the test fixture only after
+                # verifying the external alias was not changed by the helper.
+                os.chmod(alias, stat.S_IWRITE)
+                alias.unlink()
+                if obj.exists():
+                    os.chmod(obj, stat.S_IWRITE)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows readonly attributes')
+    def test_cleanup_refuses_readonly_object_in_unapproved_git_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'owned'
+            obj = root / 'other.git' / 'objects' / 'object'
+            obj.parent.mkdir(parents=True)
+            obj.write_text('keep', encoding='utf8')
+            os.chmod(obj, stat.S_IREAD)
+            error = PermissionError('denied')
+            error.winerror = 5
+            def fail(_root, *, onerror):
+                onerror(os.unlink, str(obj), (PermissionError, error, None))
+            try:
+                with mock.patch.object(self.host.shutil, 'rmtree', side_effect=fail), \
+                        mock.patch.object(self.host.os, 'chmod') as chmod:
+                    with self.assertRaises(PermissionError):
+                        self.host.remove_owned_host_temporary(root)
+                    chmod.assert_not_called()
+                self.assertTrue(obj.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+            finally:
+                os.chmod(obj, stat.S_IWRITE)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows readonly attributes')
+    def test_cleanup_refuses_mismatched_git_directory_structure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'owned'
+            git_dir = root / 'remote.git'
+            objects = git_dir / 'objects'
+            objects.mkdir(parents=True)
+            (git_dir / 'refs').mkdir()
+            (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf8')
+            (git_dir / 'config').write_text('[core]\n  bare = false\n', encoding='utf8')
+            obj = objects / 'object'
+            obj.write_text('keep', encoding='utf8')
+            os.chmod(obj, stat.S_IREAD)
+            error = PermissionError('denied')
+            error.winerror = 5
+            def fail(_root, *, onerror):
+                onerror(os.unlink, str(obj), (PermissionError, error, None))
+            try:
+                with mock.patch.object(self.host.shutil, 'rmtree', side_effect=fail), \
+                        mock.patch.object(self.host.os, 'chmod') as chmod:
+                    with self.assertRaises(PermissionError):
+                        self.host.remove_owned_host_temporary(root)
+                    chmod.assert_not_called()
+                self.assertTrue(obj.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+            finally:
+                os.chmod(obj, stat.S_IWRITE)
+
+    def test_cleanup_refuses_wrong_target_and_unsafe_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'owned'
+            root.mkdir()
+            outside = Path(directory) / 'outside'
+            outside.write_text('keep', encoding='utf8')
+            wrong = root / 'ordinary'
+            wrong.write_text('keep', encoding='utf8')
+            objects = root / 'repo' / '.git' / 'objects'
+            objects.mkdir(parents=True)
+            writable_object = objects / 'writable'
+            writable_object.write_text('keep', encoding='utf8')
+            traversal = objects / '..' / '..' / '..' / '..' / 'outside'
+            with mock.patch.object(self.host.shutil, 'rmtree') as remove:
+                self.host.remove_owned_host_temporary(root, unsafe=True)
+                remove.assert_not_called()
+            for path in (outside, wrong, root, writable_object, traversal):
+                error = PermissionError('denied')
+                error.winerror = 5
+                def fail(_root, *, onerror):
+                    onerror(os.unlink, str(path), (PermissionError, error, None))
+                with mock.patch.object(self.host.shutil, 'rmtree', side_effect=fail), \
+                        mock.patch.object(self.host.os, 'chmod') as chmod:
+                    with self.assertRaises(PermissionError):
+                        self.host.remove_owned_host_temporary(root)
+                    chmod.assert_not_called()
+                self.assertTrue(path.exists())
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows readonly attributes and junctions')
+    def test_cleanup_restores_readonly_when_retry_is_denied_and_rejects_junction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'owned'
+            root.mkdir()
+            repo = root / 'repo'
+            subprocess.run(['git', 'init', '-q', str(repo)], check=True, capture_output=True)
+            oid = subprocess.run(['git', '-C', str(repo), 'hash-object', '-w', '--stdin'],
+                                 input=b'retry object', check=True, capture_output=True).stdout.decode().strip()
+            objects = repo / '.git' / 'objects'
+            obj = objects / oid[:2] / oid[2:]
+            error = PermissionError('denied')
+            error.winerror = 5
+            def fail(_root, *, onerror):
+                onerror(os.unlink, str(obj), (PermissionError, error, None))
+            try:
+                with mock.patch.object(self.host.shutil, 'rmtree', side_effect=fail), \
+                        mock.patch.object(self.host.os, 'unlink', side_effect=PermissionError('retry denied')):
+                    with self.assertRaises(PermissionError):
+                        self.host.remove_owned_host_temporary(root)
+                self.assertTrue(root.exists())
+                self.assertTrue(obj.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+            finally:
+                os.chmod(obj, stat.S_IWRITE)
+            outside = Path(directory) / 'outside'
+            outside.mkdir()
+            target = outside / 'object'
+            target.write_text('keep', encoding='utf8')
+            link = objects / 'redirect'
+            directory_link(outside, link)
+            def fail_junction(_root, *, onerror):
+                onerror(os.unlink, str(link / 'object'), (PermissionError, error, None))
+            try:
+                with mock.patch.object(self.host.shutil, 'rmtree', side_effect=fail_junction), \
+                        mock.patch.object(self.host.os, 'chmod') as chmod:
+                    with self.assertRaises(PermissionError):
+                        self.host.remove_owned_host_temporary(root)
+                    chmod.assert_not_called()
+                self.assertEqual(target.read_text(encoding='utf8'), 'keep')
+            finally:
+                os.rmdir(link)
+
     def test_failed_initialization_cleans_owned_root_and_returns_failed_result(self):
         from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as directory:
@@ -430,6 +626,24 @@ class HostBoundEntrypointTests(unittest.TestCase):
             self.assertEqual(actual["cleanup"]["status"], "passed")
             self.assertEqual(actual["gates"][-1]["id"], "host_bound_acceptance")
             self.assertFalse(temporary.exists())
+
+    def test_cleanup_failure_is_reported_and_retains_owned_root(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory) / 'owned'
+            temporary.mkdir()
+            result = {'status': 'passed', 'gates': [], 'repository': {'commit': 'a' * 40},
+                      'run': {}, 'cleanup': {'status': 'passed', 'remaining_ids': []}}
+            api = SimpleNamespace(gate=NATIVE.gate, timestamp=NATIVE.timestamp)
+            with mock.patch.object(self.host, 'host_temporary_root', return_value=temporary), \
+                    mock.patch.object(self.host, 'isolated_environment', side_effect=OSError('setup')), \
+                    mock.patch.object(self.host, 'discover_owned_hosts', return_value={}), \
+                    mock.patch.object(self.host, 'remove_owned_host_temporary', side_effect=PermissionError('cleanup')):
+                actual = self.host.host_acceptance(api, Path(directory), Path('artifact'), 'b' * 64,
+                                                   Path('runtime'), result)
+            self.assertEqual(actual['cleanup']['status'], 'failed')
+            self.assertIn('host_temporary_cleanup_failed', actual['cleanup']['remaining_ids'])
+            self.assertTrue(temporary.exists())
 
     def test_cancel_and_diagnostic_export_failure_do_not_skip_cleanup(self):
         from types import SimpleNamespace
@@ -466,9 +680,11 @@ class HostBoundEntrypointTests(unittest.TestCase):
                     mock.patch.object(self.host, "package_fixture", return_value=Path("fixture")), \
                     mock.patch.object(self.host, "probe_driver_digest", return_value="c" * 64), \
                     mock.patch.object(self.host, "preflight_host_inputs", return_value=({"version": "fixture"}, {})), \
-                    mock.patch.object(self.host, "run_host_command", side_effect=subprocess.TimeoutExpired("tar", 120)):
+                    mock.patch.object(self.host, "run_host_command", side_effect=subprocess.TimeoutExpired("tar", 120)), \
+                    mock.patch.object(self.host, "remove_owned_host_temporary") as remove:
                 actual = self.host.host_acceptance(api, Path(directory), Path("artifact.tgz"), "b" * 64,
                                                    Path("runtime"), result)
+            remove.assert_not_called()
             self.assertEqual(actual["status"], "failed")
             self.assertIn("host_child_state_unknown", actual["cleanup"]["remaining_ids"])
             self.assertIn("host_temporary_root", actual["cleanup"]["remaining_ids"])

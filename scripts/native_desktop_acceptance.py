@@ -448,7 +448,10 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
             remaining.append("desktop_listener")
         # An unconfirmed process or listener may still depend on this root.
         if not any(item in remaining for item in ("desktop_child_state_unknown", "desktop_process_cleanup_failed", "desktop_listener")):
-            shutil.rmtree(temporary, ignore_errors=True)
+            try:
+                host.remove_owned_host_temporary(temporary)
+            except OSError:
+                remaining.append("desktop_temporary_cleanup_failed")
         if temporary.exists():
             remaining.append("desktop_temporary_root")
         result["cleanup"] = {"status": "failed" if remaining else "passed", "remaining_ids": list(dict.fromkeys(remaining))}

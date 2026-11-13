@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createProbeAgent, readProbeItem, runtimeRequire, shellTerminalFacts, startProbeTurn, appendProbeToolStep, executeProbeTool, finishProbeToolCall, appendProbeCompaction } from './native_host_probe.mjs'
 import { runNativeReleaseFixture } from './native_release_fixture_v070.mjs'
-import { runGitIncident, runFollowupIncident, assertIncidentSummary } from './native_incident_fixture_v070.mjs'
+import { runGitIncident, runFollowupIncident, assertIncidentSummary, createGitFixture, createGitExtFixture } from './native_incident_fixture_v070.mjs'
 
 export const name = 'completion-guard-native-probe-v070'
 export const inject = ['agents', 'sessions', 'sessionPersistence', 'appReady', 'commands']
@@ -184,9 +184,15 @@ export function apply(ctx, config) {
     let current = 'initialize_runtime'
     let operation = 'initialize'
     let lastTool = null
-    let mode = 'initial'
+    const control = ['archive043_localpath', 'archive043_ext'].includes(config.controlMode)
+    let mode = control ? 'control' : 'initial'
     let activationRestart
     try {
+      assert.ok(config.controlMode === undefined || control, 'unknown control mode')
+      if (control) {
+        assert.equal(process.platform, 'win32')
+        assert.equal(existsSync(`${config.output}.complete`), false, 'control cannot resume full acceptance')
+      }
       digest = driverDigest()
       progress = createProbeProgress(config, digest)
       progress.record('initialize', 'started')
@@ -260,6 +266,7 @@ export function apply(ctx, config) {
       return { callId, value: result.value, result }
     }
     const check = async (id, fn) => {
+      if (control && id !== 'v070_archive043_git_chain') return
       current = id
       operation = id
       const pair = await progress.timed('case_' + id, fn, false)
@@ -269,7 +276,7 @@ export function apply(ctx, config) {
         ...(pair.incident ? { incident: pair.incident } : {}) })
       progress.record('result_' + id, 'passed')
     }
-      if (existsSync(`${config.output}.complete`)) {
+      if (!control && existsSync(`${config.output}.complete`)) {
         mode = 'restart'
         const receipt = JSON.parse(readFileSync(`${config.output}.complete`, 'utf8'))
         assert.equal(receipt.nonce, config.nonce)
@@ -500,13 +507,17 @@ export function apply(ctx, config) {
         })
         const incidentApi = {
           open, root, tool, projection, shellFacts: shellTerminalFacts,
+          ...(config.controlMode === 'archive043_localpath' ? { createGitFixture } : {}),
+          ...(config.controlMode === 'archive043_ext' ? { createGitFixture: createGitExtFixture } : {}),
           reopen: label => open(label, true),
           boundary: (view, text) => domain.decideTurnBoundary(view, text),
-          shell: (command, workdir) => {
+          shell: async (command, workdir) => {
             const name = process.platform === 'win32' ? 'pwsh' : 'bash'
             const fields = handle.agent.ctx.tools.get(name, handle.agent)?.parameters?.properties ?? {}
-            return tool(name, { command, workdir,
+            const effect = await tool(name, { command, workdir,
               ...(fields.description ? { description: 'Run isolated local Git incident analogue' } : {}) }, false)
+            if (control) assert.equal(effect.value?.sandbox?.mode, 'workspace-write', 'control requires restricted child')
+            return effect
           },
           legacyRoots: async texts => {
             // Reconstruct recoverable pre-v6 input; do not claim an original
@@ -562,7 +573,7 @@ export function apply(ctx, config) {
         error_code: /^[A-Z_]{1,60}$/.test(error?.code ?? '') ? error.code : 'PROBE_ASSERTION_FAILED' })
     } finally {
       if (handle) { try { await progress.timed('dispose_final', () => handle.dispose()) } catch { rows.push({ id: 'v070_agent_cleanup', status: 'failed', positive: false, negative: false }) } }
-      const result = { schema: 'dsh-native-host-probe/v2', nonce: config.nonce, pid: process.pid, mode,
+      const result = { schema: control ? 'dsh-native-host-control/v1' : 'dsh-native-host-probe/v2', nonce: config.nonce, pid: process.pid, mode,
         driver_sha256: digest, status: rows.length === (mode === 'initial' ? INITIAL_CASES.length : 1)
           && rows.every(row => row.status === 'passed') ? 'passed' : 'failed',
         cases: rows, real_model_request: false }

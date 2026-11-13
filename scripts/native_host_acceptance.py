@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import hashlib
+import configparser
 import tarfile
 import json
 import os
@@ -18,6 +19,7 @@ import shutil
 import signal
 import shlex
 import socket
+import stat
 import subprocess
 import tempfile
 import time
@@ -687,6 +689,99 @@ def cleanup_owned_processes(processes: list[subprocess.Popen]) -> list[str]:
     return remaining
 
 
+def remove_owned_host_temporary(root: Path, unsafe: bool = False) -> None:
+    """Remove a quiescent owned tree, narrowly recovering readonly Git objects.
+
+    Only Windows unlink access-denied on regular, non-reparse files in validated
+    working or bare Git object directories receives a single retry. Other
+    failures propagate and retain evidence.
+    """
+    if unsafe:
+        return
+    root = root.absolute()
+    root_entry = root.lstat()
+    if getattr(root_entry, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0):
+        raise OSError('owned temporary root is a reparse point')
+    # Register verified Git directories before rmtree removes HEAD/config/refs.
+    # Never follow a reparse point while finding candidates.
+    registered = set()
+    pending = [root] if platform.system() == 'Windows' else []
+    while pending:
+        parent = pending.pop()
+        with os.scandir(parent) as children:
+            for child in children:
+                info = child.stat(follow_symlinks=False)
+                if (getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0)
+                        or not stat.S_ISDIR(info.st_mode)):
+                    continue
+                path = Path(child.path)
+                if path.name not in ('.git', 'remote.git'):
+                    pending.append(path)
+                    continue
+                try:
+                    for name, kind in (('HEAD', stat.S_ISREG), ('config', stat.S_ISREG),
+                                       ('objects', stat.S_ISDIR), ('refs', stat.S_ISDIR)):
+                        structural = (path / name).lstat()
+                        if (not kind(structural.st_mode) or getattr(structural, 'st_file_attributes', 0)
+                                & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0)):
+                            raise ValueError('invalid Git directory structure')
+                    head = (path / 'HEAD').read_text(encoding='utf8').strip()
+                    if not re.fullmatch(r'(?:ref: refs/[^\r\n]+|[0-9a-fA-F]{40,64})', head):
+                        raise ValueError('invalid Git HEAD')
+                    git_config = configparser.RawConfigParser()
+                    with (path / 'config').open(encoding='utf8') as stream:
+                        git_config.read_file(stream)
+                    if git_config.getboolean('core', 'bare') != (path.name == 'remote.git'):
+                        raise ValueError('wrong Git directory type')
+                    registered.add(path)
+                except (OSError, UnicodeError, configparser.Error, ValueError):
+                    pass
+
+    def onerror(function, name, error_info):
+        error = error_info[1]
+        path = Path(name).absolute()
+        try:
+            parts = path.relative_to(root).parts
+        except ValueError:
+            raise error
+        if '..' in parts:
+            raise error
+        matches = [i for i in range(len(parts) - 2)
+                   if parts[i] in ('.git', 'remote.git') and parts[i + 1] == 'objects']
+        if (platform.system() != 'Windows' or function not in (os.unlink, os.remove)
+                or not isinstance(error, PermissionError) or getattr(error, 'winerror', None) != 5
+                or len(matches) != 1):
+            raise error
+        current = root
+        for part in parts:
+            current = current / part
+            entry = current.lstat()
+            if getattr(entry, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+                raise error
+        if (not stat.S_ISREG(entry.st_mode) or entry.st_nlink != 1
+                or not getattr(entry, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_READONLY):
+            raise error
+        if root.joinpath(*parts[:matches[0] + 1]) not in registered:
+            raise error
+        os.chmod(path, stat.S_IWRITE)
+        try:
+            function(path)
+        except OSError:
+            # Restore only the same ordinary file; never chmod a replacement.
+            try:
+                current_entry = path.lstat()
+                if ((current_entry.st_dev, current_entry.st_ino) == (entry.st_dev, entry.st_ino)
+                        and stat.S_ISREG(current_entry.st_mode)
+                        and current_entry.st_nlink == 1
+                        and not getattr(current_entry, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+                    os.chmod(path, entry.st_mode)
+            except OSError:
+                pass
+            raise
+
+    shutil.rmtree(root, onerror=onerror)
+
+
 def native_probe_profile_options(profile: str) -> tuple[list[dict[str, object]], list[str]]:
     """Keep Headless's real startup service while disabling only the task runner.
 
@@ -987,7 +1082,10 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             "restart_process_identity_unavailable", "restart_process_cleanup_failed",
             "owned_listener_still_open"))
         if not unsafe_to_remove:
-            shutil.rmtree(temporary, ignore_errors=True)
+            try:
+                remove_owned_host_temporary(temporary)
+            except OSError:
+                remaining.append("host_temporary_cleanup_failed")
         if temporary.exists():
             remaining.append("host_temporary_root")
         result["cleanup"] = {"status": "failed" if remaining else "passed", "remaining_ids": list(dict.fromkeys(remaining))}

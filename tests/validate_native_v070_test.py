@@ -85,6 +85,11 @@ class V070AnnexTests(unittest.TestCase):
         value = {"schema": "dsh-native-host-probe/v2", "nonce": "unit", "pid": 12, "mode": "initial",
                  "driver_sha256": "a" * 64, "status": "passed", "real_model_request": False, "cases": cases}
         self.assertTrue(host.validate_probe(value, "unit", "a" * 64, protocol="v070"))
+        value["schema"] = "dsh-native-host-control/v1"
+        value["mode"] = "control"
+        self.assertFalse(host.validate_probe(value, "unit", "a" * 64, protocol="v070"))
+        value["schema"] = "dsh-native-host-probe/v2"
+        value["mode"] = "initial"
         for row in cases:
             if "incident" not in row:
                 continue

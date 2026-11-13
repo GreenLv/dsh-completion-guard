@@ -171,7 +171,7 @@ class ProducerConsumerClosureTests(unittest.TestCase):
         return artifact, MARKET.NATIVE.sha256(artifact)
 
     def full_run(self, directory: str, *, inject_digests=None, drift=None, market_status="observed",
-                 market_capabilities=None, closure_break=None):
+                 market_capabilities=None, closure_break=None, slot_check=None):
         artifact, artifact_sha = self.artifact_fixture(directory)
         temp = Path(directory) / "owned"
         temp.mkdir()
@@ -321,7 +321,7 @@ class ProducerConsumerClosureTests(unittest.TestCase):
                 mock.patch.object(MARKET.host, "probe_driver_digest", return_value=DRIVER), \
                 mock.patch.object(MARKET.host, "write_host_diagnostic", return_value=None), \
                 mock.patch.object(MARKET.desktop, "carrier", return_value=Path("/synthetic/desktop")), \
-                mock.patch.object(MARKET.desktop, "assert_slot_available", return_value=None), \
+                mock.patch.object(MARKET.desktop, "assert_slot_available", side_effect=slot_check), \
                 mock.patch.object(MARKET, "market_driver_digest", return_value=digest_seed["value"]), \
                 mock.patch.object(MARKET, "registry_market_identity",
                                   return_value={"version": "1.66.6", "registry_integrity": INTEGRITY}), \
@@ -363,6 +363,37 @@ class ProducerConsumerClosureTests(unittest.TestCase):
             self.assertEqual(set(out["market"]), {"package", "version", "registry_integrity"})
             self.assertEqual(out["market_observation"]["status"], "observed")
             self.assertEqual(out["desktop_runtime"]["host_version"], "0.2.1-rc.2")
+
+    def test_cleanup_failure_cannot_be_reported_as_market_pass(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(MARKET.host, 'remove_owned_host_temporary', side_effect=PermissionError('cleanup')):
+            run = self.full_run(directory)
+            result = run['result']
+            self.assertEqual(result['cleanup']['status'], 'failed')
+            self.assertIn('desktop_market_temporary_cleanup_failed', result['cleanup']['remaining_ids'])
+            self.assertEqual(result['status'], 'failed')
+            self.assertTrue(run['temp'].exists())
+
+    def test_open_market_listener_preserves_owned_root(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(MARKET.host, 'remove_owned_host_temporary') as remove:
+            run = self.full_run(directory, slot_check=[None, None, OSError('listener remains')])
+            remove.assert_not_called()
+            self.assertEqual(run['result']['cleanup']['status'], 'failed')
+            self.assertIn('desktop_market_listener', run['result']['cleanup']['remaining_ids'])
+            self.assertTrue(run['temp'].exists())
+
+    def test_interrupted_market_setup_preserves_owned_root(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(MARKET.host, 'remove_owned_host_temporary') as remove:
+            run = self.full_run(directory, slot_check=[KeyboardInterrupt(), None])
+            remove.assert_not_called()
+            self.assertEqual(run['result']['cleanup']['status'], 'failed')
+            self.assertIn('desktop_market_child_state_unknown', run['result']['cleanup']['remaining_ids'])
+            self.assertTrue(run['temp'].exists())
 
     def test_field_mutations_break_the_produced_receipt(self):
         import tempfile
