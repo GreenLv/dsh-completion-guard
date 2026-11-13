@@ -346,6 +346,28 @@ def _stream_digest(stream) -> str:
     return h.hexdigest()
 
 
+def _fd_matches_path(path: Path, expected: tuple, opened: os.stat_result, *, windows: bool | None = None) -> bool:
+    """Compare an open handle with the complete path snapshot.
+
+    Windows path stat synthesizes execute bits for native executable suffixes;
+    fstat on the same handle does not. The exception is directional and is
+    confined to this path-to-handle comparison, never path-to-path identity.
+    """
+    if windows is None:
+        windows = os.name == 'nt'
+    current = path.lstat()
+    if identity(current) != expected or current.st_nlink != opened.st_nlink:
+        return False
+    actual = identity(opened)
+    if actual == expected:
+        return True
+    expected_mode = expected[2]
+    return (windows and path.suffix.lower() in {'.exe', '.com', '.bat', '.cmd'}
+            and stat.S_ISREG(expected_mode) and expected_mode & 0o111 == 0o111
+            and actual[2] == expected_mode & ~0o111
+            and actual[:2] == expected[:2] and actual[3:] == expected[3:])
+
+
 def _open_source_file(path: Path, expected: tuple, root: Path):
     if identity(path.lstat()) != expected or is_link(path):
         raise ValueError("source entry changed during copy")
@@ -354,7 +376,7 @@ def _open_source_file(path: Path, expected: tuple, root: Path):
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     fd = os.open(path, flags)
     try:
-        if identity(os.fstat(fd)) != expected:
+        if not _fd_matches_path(path, expected, os.fstat(fd)):
             raise ValueError("source entry changed during copy")
         return os.fdopen(fd, "rb")
     except BaseException:
@@ -477,7 +499,7 @@ def copy_runtime(source: Path, destination: Path, *, max_files=250_000, max_byte
             with out.open("xb") as target_stream:
                 shutil.copyfileobj(source_stream, target_stream, BLOCK)
             source_stream.seek(0)
-            if _stream_digest(source_stream) != before or identity(os.fstat(source_stream.fileno())) != expected:
+            if _stream_digest(source_stream) != before or not _fd_matches_path(child, expected, os.fstat(source_stream.fileno())):
                 raise ValueError("source or destination bytes changed during copy")
         shutil.copymode(child, out, follow_symlinks=False)
         if file_sha256(out) != before or identity(child.lstat()) != expected:
@@ -516,11 +538,11 @@ def copy_runtime(source: Path, destination: Path, *, max_files=250_000, max_byte
                 raise ValueError("source directory changed during copy")
     for path, (expected, output_identity, digest) in files.items():
         with _open_source_file(path, expected, src) as stream:
-            if _stream_digest(stream) != digest or identity(os.fstat(stream.fileno())) != expected:
+            if _stream_digest(stream) != digest or not _fd_matches_path(path, expected, os.fstat(stream.fileno())):
                 raise ValueError("source or destination bytes changed during copy")
         out = dst / path.relative_to(src)
         with _open_source_file(out, output_identity, dst) as stream:
-            if _stream_digest(stream) != digest or identity(os.fstat(stream.fileno())) != output_identity:
+            if _stream_digest(stream) != digest or not _fd_matches_path(out, output_identity, os.fstat(stream.fileno())):
                 raise ValueError("source or destination bytes changed during copy")
     for link, resolved in relocated.items():
         expected, raw = raw_links[link]

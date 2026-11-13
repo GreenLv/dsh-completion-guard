@@ -3,11 +3,13 @@ import ntpath
 import os
 import secrets
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
 from contextlib import contextmanager
 from pathlib import Path, PureWindowsPath
+from types import SimpleNamespace
 from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
@@ -62,6 +64,96 @@ def unlink_directory_link(path):
 
 
 class CopyTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows executable-suffix stat behavior')
+    def test_windows_real_path_and_fd_modes_copy_executable_and_plain_files(self):
+        with directory() as root:
+            src = make_source(root)
+            names = ['upper.CMD', 'lower.cmd', 'upper.EXE', 'lower.exe', 'x.BAT', 'x.COM',
+                     'plain', 'x.ps1', 'x.js', 'readonly.CMD', 'readonly.ps1']
+            paths = [src / 'node_modules' / name for name in names]
+            output = root / 'copy'
+            try:
+                for path in paths:
+                    path.write_bytes(b'fixture content')
+                    if path.name.startswith('readonly'):
+                        os.chmod(path, stat.S_IREAD)
+                    path_info = path.lstat()
+                    with path.open('rb') as stream:
+                        opened = os.fstat(stream.fileno())
+                    self.assertTrue(module._fd_matches_path(path, module.identity(path_info), opened))
+                    if path.suffix.lower() in {'.cmd', '.exe', '.bat', '.com'}:
+                        self.assertEqual(opened.st_mode, path_info.st_mode & ~0o111)
+                    else:
+                        self.assertEqual(opened.st_mode, path_info.st_mode)
+                result = module.copy_runtime(src, output)
+                self.assertEqual(result['files'], len(names) + 2)
+                for path in paths:
+                    self.assertEqual((output / 'node_modules' / path.name).read_bytes(), b'fixture content')
+            finally:
+                for path in paths:
+                    for item in (path, output / 'node_modules' / path.name):
+                        if item.exists():
+                            os.chmod(item, stat.S_IWRITE)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows executable-suffix stat behavior')
+    def test_fd_identity_rejects_mismatches_and_non_windows_execute_change(self):
+        with directory() as root:
+            path = root / 'case.CMD'
+            path.write_bytes(b'fixture')
+            path_info = path.lstat()
+            expected = module.identity(path_info)
+            with path.open('rb') as stream:
+                fd = os.fstat(stream.fileno())
+            fields = {name: getattr(fd, name) for name in
+                      ('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns', 'st_nlink')}
+            self.assertTrue(module._fd_matches_path(path, expected, SimpleNamespace(**fields), windows=True))
+            self.assertFalse(module._fd_matches_path(path, expected, SimpleNamespace(**fields), windows=False))
+            for field, value in [('st_dev', fd.st_dev + 1), ('st_ino', fd.st_ino + 1),
+                                 ('st_mode', stat.S_IFDIR | stat.S_IMODE(fd.st_mode)),
+                                 ('st_mode', fd.st_mode ^ stat.S_IWRITE),
+                                 ('st_mode', fd.st_mode | stat.S_IXOTH),
+                                 ('st_size', fd.st_size + 1), ('st_mtime_ns', fd.st_mtime_ns + 1),
+                                 ('st_nlink', fd.st_nlink + 1)]:
+                with self.subTest(field=field, value=value):
+                    self.assertFalse(module._fd_matches_path(path, expected,
+                        SimpleNamespace(**{**fields, field: value}), windows=True))
+            plain = root / 'plain.ps1'
+            plain.write_bytes(b'fixture')
+            with plain.open('rb') as stream:
+                plain_fd = os.fstat(stream.fileno())
+            plain_fields = {name: getattr(plain_fd, name) for name in fields}
+            plain_fields['st_mode'] |= 0o111
+            self.assertFalse(module._fd_matches_path(plain, module.identity(plain.lstat()),
+                                                    SimpleNamespace(**plain_fields), windows=True))
+            try:
+                os.chmod(path, stat.S_IREAD)
+                self.assertFalse(module._fd_matches_path(path, expected, SimpleNamespace(**fields), windows=True))
+            finally:
+                os.chmod(path, stat.S_IWRITE)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows path permission drift')
+    def test_windows_path_mode_drift_during_copy_is_refused(self):
+        with directory() as root:
+            src = make_source(root)
+            path = src / 'node_modules' / 'first.CMD'
+            path.write_bytes(b'fixture')
+            original = module._stream_digest
+            calls = 0
+            def mutate_mode(stream):
+                nonlocal calls
+                value = original(stream)
+                calls += 1
+                if calls == 1:
+                    os.chmod(path, stat.S_IREAD)
+                return value
+            try:
+                with patch.object(module, '_stream_digest', side_effect=mutate_mode):
+                    with self.assertRaisesRegex(ValueError, 'changed during copy'):
+                        module.copy_runtime(src, root / 'copy')
+                self.assertTrue((root / 'copy').exists())
+            finally:
+                os.chmod(path, stat.S_IWRITE)
+
     def test_windows_trusted_root_alias_matrix_preserves_untrusted_suffix(self):
         normal = PureWindowsPath(r'C:\Users\runneradmin\AppData\Local\Temp\Runtime Fixture Long\source')
         short = PureWindowsPath(r'C:\Users\RUNNER~1\AppData\Local\Temp\RUNTIM~1\source')
