@@ -13,6 +13,7 @@ from unittest.mock import patch, MagicMock
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+import native_warm_acceptance as runner
 spec = importlib.util.spec_from_file_location("warm_preflight", SCRIPTS / "native_warm_scope_preflight.py")
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -86,22 +87,52 @@ class PreflightTests(unittest.TestCase):
             member=MagicMock(); member.name="package/package.json"; member.isfile.return_value=True; member.size=10
             archive=MagicMock(); archive.getmembers.return_value=[member]; archive.getmember.return_value=member
             archive.extractfile.return_value=io.BytesIO(json.dumps({"name":"dsh-completion-guard","gitHead":"a"*40}).encode())
-            with patch.object(module.native,"verify_exact_source"), patch.object(module.native,"sha256",return_value="b"*64), patch.object(module.tarfile,"open") as opened, patch.object(module.host,"preflight_host_inputs"), patch.object(module.native,"resolve_executable"), patch.object(module.host,"preflight_execution_access",side_effect=PermissionError("private")):
+            with patch.object(module.native,"verify_exact_source"), patch.object(module.native,"sha256",return_value="b"*64), patch.object(module.tarfile,"open") as opened, patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.2-rc.3"},{})), patch.object(module.native,"resolve_executable"), patch.object(module.host,"preflight_execution_access",side_effect=PermissionError("private")):
                 opened.return_value.__enter__.return_value=archive
                 result=module.check(args)
             self.assertEqual(result["status"],"failed"); self.assertEqual(result["stage"],"child_and_process_query")
             self.assertEqual(result["failure_type"],"PermissionError"); self.assertNotIn("private",json.dumps(result))
-    def test_preflight_checks_consumer_after_capabilities(self):
+    def test_preflight_checks_real_consumer_after_capabilities(self):
         with test_directory() as tmp:
             root=Path(tmp); repo=root / "repo"; runtime=root / "runtime"; repo.mkdir(); runtime.mkdir()
             artifact=root / "a"; artifact.write_bytes(b"x")
-            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,artifact_sha256="b"*64,source_commit="a"*40,web_cohort="dsh-0.2.1-rc.5-core-v1",headless_cohort="dsh-0.2.1-rc.5-core-v1")
+            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,artifact_sha256="b"*64,source_commit="a"*40,web_cohort="current",headless_cohort="current")
             member=MagicMock(); member.name="package/package.json"; member.isfile.return_value=True; member.size=10
             archive=MagicMock(); archive.getmembers.return_value=[member]; archive.getmember.return_value=member
             archive.extractfile.return_value=io.BytesIO(json.dumps({"name":"dsh-completion-guard","gitHead":"a"*40}).encode())
-            with patch.object(module.native,"verify_exact_source"), patch.object(module.native,"sha256",return_value="b"*64), patch.object(module.tarfile,"open") as opened, patch.object(module.host,"preflight_host_inputs"), patch.object(module.native,"resolve_executable"), patch.object(module.host,"preflight_execution_access"), patch.object(module.host,"preflight_link_access"), patch.object(module.subprocess,"run",return_value=MagicMock(stdout=b"consumer-ok")):
+            current=json.loads((SCRIPTS.parent / "manifests" / "supported-host.v1.json").read_text(encoding="utf8"))["cohorts"][0]
+            version=next(row["version"] for row in current["packages"] if row["name"]=="@deepseek-ai/dsh")
+            controls=module.consumer_controls(version,"a"*40,"b"*64,"c"*64)
+            self.assertTrue(runner.validate_result(controls["valid"],controls["expected"]))
+            for invalid in controls["refusals"]: self.assertFalse(runner.validate_result(invalid,controls["expected"]))
+            node=shutil.which("node")
+            self.assertIsNotNone(node)
+            actual_run=module.subprocess.run
+            with patch.object(module.native,"verify_exact_source"), patch.object(module.native,"sha256",return_value="b"*64), patch.object(module.tarfile,"open") as opened, patch.object(module.host,"preflight_host_inputs",return_value=({"version":version},{})), patch.object(module.native,"resolve_executable",return_value=node), patch.object(module.host,"preflight_execution_access"), patch.object(module.host,"preflight_link_access"), patch.object(module.subprocess,"run",wraps=actual_run) as invoked:
                 opened.return_value.__enter__.return_value=archive
                 result=module.check(args)
             self.assertEqual(result["status"],"passed"); self.assertEqual(result["stage"],"complete")
             self.assertFalse(result["acceptance_executed"])
+            sent=json.loads(invoked.call_args.kwargs["input"])
+            self.assertEqual(sent["valid"]["host"]["version"],version)
+            self.assertEqual(len(sent["valid"]["profiles"]["web"]["steps"]),10)
+            self.assertEqual(len(sent["refusals"]),3)
+
+            # The same positive control uses the host input returned by this
+            # invocation. An old host cannot silently satisfy the new consumer.
+            archive.extractfile.return_value=io.BytesIO(json.dumps({"name":"dsh-completion-guard","gitHead":"a"*40}).encode())
+            with patch.object(module.native,"verify_exact_source"), patch.object(module.native,"sha256",return_value="b"*64), patch.object(module.tarfile,"open") as opened, patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.2-rc.2"},{})), patch.object(module.native,"resolve_executable",return_value=node), patch.object(module.host,"preflight_execution_access"), patch.object(module.host,"preflight_link_access"):
+                opened.return_value.__enter__.return_value=archive
+                refused=module.check(args)
+            self.assertEqual((refused["status"],refused["stage"]),("failed","consumer"))
+
+    def test_consumer_control_rejects_both_trivial_accept_and_trivial_refusal(self):
+        cohort=json.loads((SCRIPTS.parent / "manifests" / "supported-host.v1.json").read_text(encoding="utf8"))["cohorts"][0]
+        version=next(row["version"] for row in cohort["packages"] if row["name"]=="@deepseek-ai/dsh")
+        controls=module.consumer_controls(version,"a"*40,"b"*64,"c"*64)
+        with test_directory() as root:
+            for output in ("true", "false"):
+                consumer=root / ("consumer-"+output+".mjs")
+                consumer.write_text("export const validateWarmResult=()=>"+output+";",encoding="utf8")
+                with self.assertRaises(module.subprocess.CalledProcessError): module.verify_consumer(consumer,controls)
 if __name__ == "__main__": unittest.main()

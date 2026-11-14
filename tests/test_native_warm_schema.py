@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/"scripts"))
 import native_warm_acceptance as runner
+import native_warm_scope_preflight as preflight
 try: import jsonschema
 except ImportError: jsonschema=None
 
@@ -21,17 +22,45 @@ def profile(pid):
 
 class SchemaTests(unittest.TestCase):
     @unittest.skipIf(jsonschema is None,'jsonschema unavailable')
+    def test_current_package_cohort_defaults_schema_and_consumer_remain_aligned(self):
+        package=json.loads((ROOT/'package.json').read_text(encoding='utf8'))
+        manifest=json.loads((ROOT/'manifests'/'supported-host.v1.json').read_text(encoding='utf8'))
+        self.assertEqual(len(manifest['cohorts']),1)
+        cohort=manifest['cohorts'][0]
+        versions=[row['version'] for row in cohort['packages'] if row['name']=='@deepseek-ai/dsh']
+        self.assertEqual(len(versions),1)
+        version=versions[0]
+        self.assertEqual(package['engines']['dsh'],'>='+version)
+        self.assertEqual(package['dsh']['engines']['dsh'],'>='+version)
+        base=['--repo-root','.', '--runtime-root','.', '--artifact','x', '--source-commit','a'*40,
+              '--artifact-sha256','b'*64, '--output','x']
+        for parser, args in [(preflight.argument_parser(),base), (runner.argument_parser(),base+['--driver-sha256','c'*64])]:
+            selected=parser.parse_args(args)
+            self.assertEqual((selected.web_cohort,selected.headless_cohort),(cohort['id'],cohort['id']))
+        schema=json.loads((ROOT/'schemas'/'native-warm-scope-v1.schema.json').read_text(encoding='utf8'))
+        controls=preflight.consumer_controls(version,'a'*40,'b'*64,'c'*64)
+        jsonschema.validate(controls['valid'],schema)
+        self.assertTrue(runner.validate_result(controls['valid'],controls['expected']))
+        for invalid in controls['refusals']:
+            self.assertFalse(runner.validate_result(invalid,controls['expected']))
+        old=next(row['version'] for row in manifest['historicalCohorts'][0]['packages'] if row['name']=='@deepseek-ai/dsh')
+        self.assertNotEqual(version,old)
+        controls['valid']['host']['version']=old
+        with self.assertRaises(jsonschema.ValidationError):jsonschema.validate(controls['valid'],schema)
+        self.assertFalse(runner.validate_result(controls['valid'],controls['expected']))
+
+    @unittest.skipIf(jsonschema is None,'jsonschema unavailable')
     def test_schema_and_consumer_agree_on_complete_and_missing_stage(self):
         schema=json.loads((ROOT/'schemas'/'native-warm-scope-v1.schema.json').read_text(encoding='utf8'))
         jsonschema.Draft202012Validator.check_schema(schema)
         expected={'source_commit':'a'*40,'artifact_sha256':'b'*64,'driver_sha256':'c'*64}
-        result={'schema':'dsh-native-warm-scope/v1','status':'passed',**expected,'platform':'windows','host':{'version':'0.2.2-rc.2','node_version':'v24.18.0','runtime_sha256':'e'*64,'node_sha256':'f'*64},'profiles':{'web':profile(101),'headless':profile(201)},'cleanup':{'status':'passed','remaining_ids':[]}}
+        result={'schema':'dsh-native-warm-scope/v1','status':'passed',**expected,'platform':'windows','host':{'version':'0.2.2-rc.3','node_version':'v24.18.0','runtime_sha256':'e'*64,'node_sha256':'f'*64},'profiles':{'web':profile(101),'headless':profile(201)},'cleanup':{'status':'passed','remaining_ids':[]}}
         jsonschema.validate(result,schema);self.assertTrue(runner.validate_result(result,expected))
-        for version in ('0.2.0-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0', '0.2.2-rc.1', '0.2.2-rc.3', '0.2.2'):
+        for version in ('0.2.0-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0', '0.2.2-rc.1', '0.2.2-rc.2', '0.2.2'):
             result['host']['version']=version
             with self.assertRaises(jsonschema.ValidationError):jsonschema.validate(result,schema)
             self.assertFalse(runner.validate_result(result,expected))
-        result['host']['version']='0.2.2-rc.2'
+        result['host']['version']='0.2.2-rc.3'
         result['host']['node_version']=''
         with self.assertRaises(jsonschema.ValidationError):jsonschema.validate(result,schema)
         self.assertFalse(runner.validate_result(result,expected))

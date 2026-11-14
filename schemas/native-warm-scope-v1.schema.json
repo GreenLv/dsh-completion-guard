@@ -114,7 +114,7 @@
             ],
             "properties": {
               "version": {
-                "const": "0.2.2-rc.2"
+                "const": "0.2.2-rc.3"
               },
               "node_version": {
                 "type": "string",

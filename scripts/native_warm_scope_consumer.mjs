@@ -12,7 +12,7 @@ export function validateWarmResult(result,expected) {
   // This source's native run must name its selected reviewed host. Earlier
   // receipts retain their original source/schema consumer; historical rows
   // cannot qualify a current run on a host below the raised support floor.
-  if(!exact(result.host,['version','node_version','runtime_sha256','node_sha256'])||result.host.version!=='0.2.2-rc.2'||typeof result.host.node_version!=='string'||result.host.node_version.length===0||!HEX64.test(result.host.runtime_sha256)||!HEX64.test(result.host.node_sha256))return false
+  if(!exact(result.host,['version','node_version','runtime_sha256','node_sha256'])||result.host.version!=='0.2.2-rc.3'||typeof result.host.node_version!=='string'||result.host.node_version.length===0||!HEX64.test(result.host.runtime_sha256)||!HEX64.test(result.host.node_sha256))return false
   if(!exact(result.cleanup,['status','remaining_ids'])||result.cleanup.status!=='passed'||!Array.isArray(result.cleanup.remaining_ids)||result.cleanup.remaining_ids.length)return false
   if(!exact(result.profiles,['web','headless']))return false
   for(const name of ['web','headless']) {

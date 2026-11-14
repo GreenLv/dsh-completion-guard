@@ -58,7 +58,7 @@ async function installedRuntime(t,layout,{escapeAnchor=false,escapeSession=false
   const alternate=externalImporterDependency?join(outside,'alternate-llm'):realDir('alternate-llm')
   const link=async(target,path)=>{await mkdir(dirname(path),{recursive:true});await symlink(target,path,process.platform==='win32'?'junction':'dir')}
   for(const dir of [dsh,...(missingDependency?[]:[llm]),...(missingSession?[]:[session]),...((mismatch||externalImporterDependency)?[alternate]:[])])await mkdir(dir,{recursive:true})
-  await writeFile(join(dsh,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh',version:'0.2.2-rc.2'}))
+  await writeFile(join(dsh,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh',version:'0.2.2-rc.3'}))
   async function addLlm(dir){await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh-llm',exports:{'.':'./index.js'}}));await writeFile(join(dir,'index.js'),'module.exports = 2\n')}
   if(!missingDependency)await addLlm(llm);if(mismatch||externalImporterDependency)await addLlm(alternate)
   if(!missingSession){await mkdir(join(session,'lib'));await writeFile(join(session,'lib','index.js'),'module.exports = 1\n');await writeFile(join(session,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh-session',main:'./lib/index.js'}))}

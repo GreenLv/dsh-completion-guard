@@ -118,14 +118,14 @@ class RunnerTests(unittest.TestCase):
                 if "inject" in args:return json.dumps({"status":"supported","cohort_id":"x","host_lock_digest":"d"*64})
                 return ""
             process=MagicMock();process.pid=123;process.poll.return_value=None
-            with patches(patch.object(module.host,"host_temporary_root",return_value=fixture),patch.object(module.tempfile,"gettempdir",return_value=str(root)),patch.object(module.native,"sha256",return_value="b"*64),patch.object(module.copier,"copy_runtime",side_effect=copy),patch.object(module.host,"isolated_environment",return_value={}),patch.object(module.native,"resolve_executable",return_value=shutil.which("node")),patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.2-rc.2"},selected)),patch.object(module,"unpack_frozen",side_effect=unpack),patch.object(module.native,"tree_digest",return_value="same"),patch.object(module.host,"run_host_command",side_effect=cmd),patch.object(module.host,"verify_target_graph"),patch.object(module,"validate_composition",return_value="view"),patch.object(module.host,"free_loopback_port",return_value=65534),patch.object(module.subprocess,"Popen",return_value=process),patch.object(module.host,"wait_until",side_effect=module.host.HostProbeDeadline("timeout")),patch.object(module.host,"cleanup_owned_processes",return_value=[]),patch.object(module.host,"discover_owned_hosts",return_value={})):
+            with patches(patch.object(module.host,"host_temporary_root",return_value=fixture),patch.object(module.tempfile,"gettempdir",return_value=str(root)),patch.object(module.native,"sha256",return_value="b"*64),patch.object(module.copier,"copy_runtime",side_effect=copy),patch.object(module.host,"isolated_environment",return_value={}),patch.object(module.native,"resolve_executable",return_value=shutil.which("node")),patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.2-rc.3"},selected)),patch.object(module,"unpack_frozen",side_effect=unpack),patch.object(module.native,"tree_digest",return_value="same"),patch.object(module.host,"run_host_command",side_effect=cmd),patch.object(module.host,"verify_target_graph"),patch.object(module,"validate_composition",return_value="view"),patch.object(module.host,"free_loopback_port",return_value=65534),patch.object(module.subprocess,"Popen",return_value=process),patch.object(module.host,"wait_until",side_effect=module.host.HostProbeDeadline("timeout")),patch.object(module.host,"cleanup_owned_processes",return_value=[]),patch.object(module.host,"discover_owned_hosts",return_value={})):
                 result=module.execute(args,"c"*64,root/"progress")
             self.assertEqual(result["status"],"failed");self.assertIn("child_state_unknown",result["cleanup"]["remaining_ids"])
             self.assertTrue(fixture.exists());self.assertTrue(Path(str(args.output)+".recovery.json").exists())
     def test_simulated_two_profile_producer_and_consumer_gate(self):
         from tests.test_native_warm_schema import profile as evidence_profile
-        for corrupt in (False,True):
-            with self.subTest(corrupt=corrupt), directory() as root:
+        for mode in ("valid", "missing", "leaked", "old_host"):
+            with self.subTest(mode=mode), directory() as root:
                 repo=root/"repo";repo.mkdir();runtime=root/"runtime";runtime.mkdir();artifact=root/"guard.tgz";artifact.write_bytes(b"x");fixture=root/"fixture";fixture.mkdir()
                 args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,source_commit="a"*40,artifact_sha256="b"*64,output=root/"result.json",web_cohort="x",headless_cohort="x")
                 selected={name:{"id":"x","packages":[]} for name in ("web","headless")};current={}
@@ -158,14 +158,17 @@ class RunnerTests(unittest.TestCase):
                 def wait(_callback,timeout):
                     if timeout!=900:return True
                     c=current['config'];pid=current['pid'];row=evidence_profile(pid);steps=row['steps']
-                    if corrupt and c['profile']=='headless':steps.pop()
+                    if mode=='missing' and c['profile']=='headless':steps.pop()
+                    if mode=='leaked' and c['profile']=='headless':steps[4]['effect_count']+=1
                     return {'schema':'dsh-native-warm-probe/v1','status':'passed','cleanup':'passed','nonce':c['nonce'],'profile':c['profile'],'pid':pid,'source_commit':c['sourceCommit'],'artifact_sha256':c['artifactSha256'],'driver_sha256':c['driverSha256'],'host_lock_digest':c['hostLockDigest'],'steps':steps}
-                with patches(patch.object(module.host,"host_temporary_root",return_value=fixture),patch.object(module.tempfile,"gettempdir",return_value=str(root)),patch.object(module.native,"sha256",return_value="b"*64),patch.object(module.copier,"copy_runtime",side_effect=copy),patch.object(module.host,"isolated_environment",return_value={}),patch.object(module.native,"resolve_executable",return_value=shutil.which("node")),patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.2-rc.2"},selected)),patch.object(module,"unpack_frozen",side_effect=unpack),patch.object(module.native,"tree_digest",return_value="same"),patch.object(module.host,"run_host_command",side_effect=cmd),patch.object(module.host,"verify_target_graph"),patch.object(module,"validate_composition",return_value="view"),patch.object(module.host,"free_loopback_port",return_value=65534),patch.object(module.subprocess,"Popen",side_effect=popen),patch.object(module.host,"wait_until",side_effect=wait),patch.object(module.host,"cleanup_owned_processes",return_value=[]),patch.object(module.host,"discover_owned_hosts",return_value={})):
+                host_version='0.2.2-rc.2' if mode=='old_host' else '0.2.2-rc.3'
+                with patches(patch.object(module.host,"host_temporary_root",return_value=fixture),patch.object(module.tempfile,"gettempdir",return_value=str(root)),patch.object(module.native,"sha256",return_value="b"*64),patch.object(module.copier,"copy_runtime",side_effect=copy),patch.object(module.host,"isolated_environment",return_value={}),patch.object(module.native,"resolve_executable",return_value=shutil.which("node")),patch.object(module.host,"preflight_host_inputs",return_value=({"version":host_version},selected)),patch.object(module,"unpack_frozen",side_effect=unpack),patch.object(module.native,"tree_digest",return_value="same"),patch.object(module.host,"run_host_command",side_effect=cmd),patch.object(module.host,"verify_target_graph"),patch.object(module,"validate_composition",return_value="view"),patch.object(module.host,"free_loopback_port",return_value=65534),patch.object(module.subprocess,"Popen",side_effect=popen),patch.object(module.host,"wait_until",side_effect=wait),patch.object(module.host,"cleanup_owned_processes",return_value=[]),patch.object(module.host,"discover_owned_hosts",return_value={})):
                     # The two profile host processes are faked, but the actual
                     # Node consumer decides whether the assembled result passes.
                     result=module.execute(args,"c"*64,root/"progress")
-                self.assertEqual(result['status'],'failed' if corrupt else 'passed')
-                self.assertEqual(fixture.exists(),corrupt)
+                self.assertEqual(result['status'],'passed' if mode=='valid' else 'failed')
+                if mode!='valid':self.assertEqual(result['failure']['stage'],'consumer_precleanup')
+                self.assertEqual(fixture.exists(),mode!='valid')
     def test_interruption_and_atomic_replace_preserve_result(self):
         with directory() as root:
             repo=root/"repo";repo.mkdir();runtime=root/"runtime";runtime.mkdir();artifact=root/"a";artifact.write_bytes(b"x")
