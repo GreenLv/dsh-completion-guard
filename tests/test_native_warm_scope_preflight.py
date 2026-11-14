@@ -9,6 +9,7 @@ import re
 from contextlib import contextmanager
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
@@ -30,7 +31,9 @@ def test_directory():
 
 class PreflightTests(unittest.TestCase):
     def setUp(self):
-        platform = patch.object(module.sys, "platform", "darwin")
+        # Isolate the platform fixture from the process-wide sys singleton:
+        # shutil.which must retain native Windows PATHEXT discovery for Node.
+        platform = patch.object(module, "sys", SimpleNamespace(platform="darwin"))
         platform.start(); self.addCleanup(platform.stop)
 
     def test_driver_covers_local_probe_imports(self):

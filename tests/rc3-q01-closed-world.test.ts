@@ -176,5 +176,8 @@ describe('RC3-Q01: qualified closed-world inventory at every entry', () => {
         expect(audit(true)).toBe(true)
       }
     } finally { rmSync(root, { recursive: true, force: true }) }
-  })
+  // This SDK integration fixture performs archive acquisition, physical
+  // installation and repeated fresh graph audits. Its wall-clock budget is
+  // separate from the directory-read assertions above; it is not a benchmark.
+  }, 30_000)
 })
