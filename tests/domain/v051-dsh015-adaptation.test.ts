@@ -82,13 +82,13 @@ describe('DSH host version policy (T09)', () => {
     expect(compareHostVersions('0.1.5-rc.1', 'v0.1.5')).toBeUndefined()
   })
 
-  it('decides the documented prerelease categories at the 0.2.2-rc.2 floor', () => {
-    // The 0.2.1 line and the retired 0.2.2-rc.1 tuple are below the raised
-    // floor and refuse; 0.2.2-rc.2 and above admit.
-    for (const version of ['0.2.2-rc.2', '0.2.2-rc.10']) {
+  it('decides the documented prerelease categories at the 0.2.2-rc.3 floor', () => {
+    // The 0.2.1 line and the retired 0.2.2-rc.1/0.2.2-rc.2 tuples are below
+    // the raised floor and refuse; 0.2.2-rc.3 and above admit.
+    for (const version of ['0.2.2-rc.3', '0.2.2-rc.10']) {
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'supported', reasonCode: 'host_version_supported' })
     }
-    for (const version of ['0.1.4', '0.1.4-rc.9', '0.1.7-alpha.9', '0.1.7-rc.2', '0.1.8-rc.1', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0', '0.2.2-rc.1', '0.2.2-alpha.3', '0.2.2-beta.1']) {
+    for (const version of ['0.1.4', '0.1.4-rc.9', '0.1.7-alpha.9', '0.1.7-rc.2', '0.1.8-rc.1', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0', '0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-alpha.3', '0.2.2-beta.1']) {
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'below_minimum', reasonCode: 'host_version_below_minimum' })
     }
     expect(evaluateMinimumHostVersion('nonsense')).toMatchObject({ status: 'unparseable', reasonCode: 'host_version_unparseable' })
@@ -96,16 +96,16 @@ describe('DSH host version policy (T09)', () => {
   })
 
   it('admits every version at or above the floor; the floor itself refuses older lines', () => {
-    for (const version of ['0.2.2-rc.2', '0.2.2', '0.2.3-rc.1', '0.2.3', '0.3.0', '1.0.0']) {
+    for (const version of ['0.2.2-rc.3', '0.2.2', '0.2.3-rc.1', '0.2.3', '0.3.0', '1.0.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
-    for (const version of ['0.1.4', '0.1.7-alpha.9', '0.1.7', '0.1.8', '0.1.8-rc.1', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.1']) {
+    for (const version of ['0.1.4', '0.1.7-alpha.9', '0.1.7', '0.1.8', '0.1.8-rc.1', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.1', '0.2.2-rc.2']) {
       expect(satisfiesSupportedHostRange(version)).toBe(false)
     }
     // Version admission above the floor is unconditional at this gate; a
     // not-yet-tested host is a recorded-evidence fact (HOST_VALIDATED_VERSIONS),
     // never a refusal reason. Future same-tuple RCs admit like later RCs.
-    expect(evaluateMinimumHostVersion('0.2.2-rc.2').status).toBe('supported')
+    expect(evaluateMinimumHostVersion('0.2.2-rc.3').status).toBe('supported')
   })
 
   it('never lets the version range alone admit an unregistered host graph', () => {

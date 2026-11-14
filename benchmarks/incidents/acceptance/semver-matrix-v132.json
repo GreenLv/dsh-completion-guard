@@ -1,0 +1,117 @@
+{
+  "range": ">=0.2.2-rc.3",
+  "semver_version": "7.8.5",
+  "note": "0.13.2 floor consumer matrix; semver-matrix-v131.json remains the unchanged 0.13.1 evidence and earlier matrices stay unchanged. Plain satisfies excludes later-tuple RCs (0.2.3-rc.1, 0.3.0-rc.1); includePrerelease:true matches the declared version policy. Recorded from the published semver resolved through the rc.3 host dependency graph.",
+  "cases": [
+    {
+      "version": "0.2.0-rc.1",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.0-rc.2",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.0",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.1-rc.2",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.1-rc.3",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.1-rc.5",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.1",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.2-alpha.3",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.2-beta.1",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.2-rc.0",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.2-rc.1",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.2-rc.2",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.2-rc.2+build.7",
+      "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.2-rc.3",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.2.2-rc.10",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.2.2",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.2.3-rc.1",
+      "plain_satisfies": false,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.2.3",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.3.0-rc.1",
+      "plain_satisfies": false,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.3.0",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "1.0.0",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "9.9.9",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    }
+  ]
+}

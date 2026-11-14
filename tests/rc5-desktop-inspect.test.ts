@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
 // RC5-D01 end-to-end (successor of the 0.11.0 RC3-D01 case), carried forward
-// to the 0.13.1 floor: the desktop preflight entry (inspectDesktopTargetGraph,
+// to the 0.13.2 floor: the desktop preflight entry (inspectDesktopTargetGraph,
 // the function behind `inspect-graph` and native preflight) must qualify a
-// 0.2.2-rc.2 app bundle through the 0.2.2-rc.2 audited manifest, while the
-// retired 0.2.2-rc.1 shape, the formerly admitted rc.5 shape and the retired
-// rc.2 shape all refuse below the raised floor. Each bundle is built from its
-// own audited manifest (vi.mock narrows the modules exactly like the rc.2/rc.3
-// suites do); the profile is a dependency-free legal Desktop shape.
+// 0.2.2-rc.3 app bundle through the 0.2.2-rc.3 audited manifest, while the
+// retired 0.2.2-rc.1 shape, the formerly admitted rc.5 shape, the retired
+// rc.2 shape and the 0.13.1-era 0.2.2-rc.2 upgrade source all refuse below
+// the raised floor. Each bundle is built from its own audited manifest
+// (vi.mock narrows the modules exactly like the rc.2/rc.3 suites do); the
+// profile is a dependency-free legal Desktop shape.
 const state = vi.hoisted(() => ({ pins: {
   schema: 'dsh-desktop-distribution/v1',
   provenance: { repository: 'https://github.com/deepseek-ai/deepseek-harness' },
@@ -48,6 +49,18 @@ vi.mock('../src/domain/rc022-rc1-byte-audit-manifest.js', async (original) => {
     },
   })) } }
 })
+vi.mock('../src/domain/rc022-rc3-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map((row) => ({
+    ...row,
+    modules: {
+      'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, type: 'module', main: 'lib/index.js' }) + '\n', 'utf8').digest('hex'),
+      'lib/index.js': libDigest,
+    },
+  })) } }
+})
 vi.mock('../src/domain/rc022-rc2-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
@@ -67,20 +80,25 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { readAsarIndex, DESKTOP_PROFILE_PACKAGE_NAME } from '../src/domain/host-desktop.js'
 import { inspectDesktopTargetGraph } from '../src/domain/host-resolver.js'
+import rc022rc3Manifest from '../src/domain/rc022-rc3-byte-audit-manifest.js'
+import rc022rc2Manifest from '../src/domain/rc022-rc2-byte-audit-manifest.js'
 import rc5Manifest from '../src/domain/rc5-byte-audit-manifest.js'
 import rc022rc1Manifest from '../src/domain/rc022-rc1-byte-audit-manifest.js'
-import rc022rc2Manifest from '../src/domain/rc022-rc2-byte-audit-manifest.js'
 import distributionPins from '../src/domain/desktop-distribution-manifest.js'
 import type { ByteAuditManifest } from '../src/domain/byte-audit-manifest.js'
 
-/** The current admitted Desktop graph (floor `>=0.2.2-rc.2`). */
-const RC2_CURRENT = '0.2.2-rc.2'
+/** The current admitted Desktop graph (floor `>=0.2.2-rc.3`). */
+const RC3_CURRENT = '0.2.2-rc.3'
 /** Historical evidence rows below the floor: the retired 0.2.2-rc.1 upgrade
- * source, formerly admitted rc.5 and the retired rc.2 shape. All refuse at
- * the version gate. */
+ * source, formerly admitted rc.5, the retired rc.2 shape and the 0.13.1-era
+ * 0.2.2-rc.2 upgrade source. All refuse at the version gate. */
 const RC1_RETIRED = '0.2.2-rc.1'
 const RC5 = '0.2.1-rc.5'
 const RC2 = '0.2.1-rc.2'
+const RC022_RC2_RETIRED = '0.2.2-rc.2'
+/** Above the floor but never audited: no registered cohort manifest, so the
+ * preflight refuses it as unqualified instead of auditing a foreign graph. */
+const UNAUDITED_ABOVE_FLOOR = '0.2.2-rc.4'
 const LIB_BYTES = 'export const synthetic = true\n'
 
 function syntheticManifestBytes(name: string, version: string): Buffer {
@@ -202,21 +220,21 @@ function registerSyntheticDistribution(root: string, version: string, asarPath: 
   return profileRoot
 }
 
-describe('RC5-D01 (0.13.1 floor): desktop preflight qualifies the 0.2.2-rc.2 app through its own cohort', () => {
-  it('inspectDesktopTargetGraph succeeds for a synthetic 0.2.2-rc.2 bundle built from the 0.2.2-rc.2 audited manifest', () => {
+describe('RC5-D01 (0.13.2 floor): desktop preflight qualifies the 0.2.2-rc.3 app through its own cohort', () => {
+  it('inspectDesktopTargetGraph succeeds for a synthetic 0.2.2-rc.3 bundle built from the 0.2.2-rc.3 audited manifest', () => {
     const root = mkdtempSync(join(tmpdir(), 'rc022-desktop-'))
     try {
-      expect(rc022rc2Manifest.hostVersion).toBe(RC2_CURRENT)
-      const { asarPath, desktopManifest } = buildBundle(root, RC2_CURRENT, rc022rc2Manifest)
-      const profileRoot = registerSyntheticDistribution(root, RC2_CURRENT, asarPath, desktopManifest)
+      expect(rc022rc3Manifest.hostVersion).toBe(RC3_CURRENT)
+      const { asarPath, desktopManifest } = buildBundle(root, RC3_CURRENT, rc022rc3Manifest)
+      const profileRoot = registerSyntheticDistribution(root, RC3_CURRENT, asarPath, desktopManifest)
       const target = inspectDesktopTargetGraph(asarPath, profileRoot)
-      expect(target.runtime.hostVersion).toBe(RC2_CURRENT)
+      expect(target.runtime.hostVersion).toBe(RC3_CURRENT)
       // Cordis stays at 4.1.0 in this cohort and is still exactly one row.
       const cordis = target.packages.filter((row) => row.name === '@deepseek-ai/cordis')
       expect(cordis).toHaveLength(1)
       expect(cordis[0]!.version).toBe('4.1.0')
-      // The 0.2.2-rc.2 rows flow through: the launcher is 0.2.2-rc.2, not an old pin.
-      expect(target.packages.find((row) => row.name === '@deepseek-ai/dsh')?.version).toBe(RC2_CURRENT)
+      // The 0.2.2-rc.3 rows flow through: the launcher is 0.2.2-rc.3, not an old pin.
+      expect(target.packages.find((row) => row.name === '@deepseek-ai/dsh')?.version).toBe(RC3_CURRENT)
       // The executor-split members introduced by this cohort are part of the graph.
       expect(target.packages.map((row) => row.name)).toEqual(expect.arrayContaining([
         '@deepseek-ai/dsh-tool-executor-native', '@deepseek-ai/dsh-tool-executor-ptc',
@@ -230,20 +248,21 @@ describe('RC5-D01 (0.13.1 floor): desktop preflight qualifies the 0.2.2-rc.2 app
   })
 
   it.each([
-    ['retired 0.2.2-rc.1 upgrade source', RC1_RETIRED],
-    ['formerly admitted rc.5', RC5],
-    ['retired rc.2-shaped', RC2],
-  ])('refuses a %s bundle below the floor even with a registered distribution row', (_label, version) => {
+    ['retired 0.2.2-rc.1 upgrade source', RC1_RETIRED, rc022rc1Manifest],
+    ['formerly admitted rc.5', RC5, rc5Manifest],
+    ['retired rc.2-shaped', RC2, rc5Manifest],
+    ['0.13.1-era 0.2.2-rc.2 upgrade source', RC022_RC2_RETIRED, rc022rc2Manifest],
+  ] as const)('refuses a %s bundle below the floor even with a registered distribution row', (_label, version, manifest) => {
     const root = mkdtempSync(join(tmpdir(), 'rc-desktop-refused-'))
     try {
-      // Historical shapes: the retired 0.2.2-rc.1 bundle is built from its own
-      // audited manifest (rows keep true versions); the rc.5/rc.2 bundles are
-      // built from the rc.5 audited manifest (the rc.5 bundle keeps the rows'
-      // true versions, the rc.2 bundle pins every row to rc.2 as the retired
-      // distribution did).
-      const { asarPath, desktopManifest } = buildBundle(root, version, version === RC1_RETIRED ? rc022rc1Manifest : rc5Manifest)
+      // Historical shapes: the retired 0.2.2-rc.1, the formerly admitted rc.5
+      // and the 0.13.1-era 0.2.2-rc.2 bundles are built from their own
+      // audited manifests (rows keep true versions); the retired rc.2-shaped
+      // bundle pins every row to 0.2.1-rc.2 from the rc.5 audited manifest,
+      // as the retired distribution did.
+      const { asarPath, desktopManifest } = buildBundle(root, version, manifest)
       const profileRoot = registerSyntheticDistribution(root, version, asarPath, desktopManifest)
-      // Below the 0.13.1 floor (`>=0.2.2-rc.2`): the version gate refuses
+      // Below the 0.13.2 floor (`>=0.2.2-rc.3`): the version gate refuses
       // before any cohort or byte audit runs; the registered synthetic
       // distribution row never reopens admission.
       try {
@@ -251,6 +270,27 @@ describe('RC5-D01 (0.13.1 floor): desktop preflight qualifies the 0.2.2-rc.2 app
         expect.unreachable(`the ${version} bundle must be refused`)
       } catch (error) {
         expect((error as { code?: string }).code).toBe('desktop_host_version_below_minimum')
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      distributionPins.distributions = []
+      distributionPins.files = []
+    }
+  })
+
+  it('refuses an above-floor runtime with no audited cohort manifest as desktop_runtime_unqualified', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rc-desktop-unqualified-'))
+    try {
+      // Above the floor but never audited: no registered cohort manifest
+      // covers 0.2.2-rc.4, so the preflight must refuse it as unqualified
+      // instead of auditing a foreign graph against the rc.3 rows.
+      const { asarPath, desktopManifest } = buildBundle(root, UNAUDITED_ABOVE_FLOOR, rc022rc3Manifest)
+      const profileRoot = registerSyntheticDistribution(root, UNAUDITED_ABOVE_FLOOR, asarPath, desktopManifest)
+      try {
+        inspectDesktopTargetGraph(asarPath, profileRoot)
+        expect.unreachable(`the ${UNAUDITED_ABOVE_FLOOR} bundle must be refused`)
+      } catch (error) {
+        expect((error as { code?: string }).code).toBe('desktop_runtime_unqualified')
       }
     } finally {
       rmSync(root, { recursive: true, force: true })

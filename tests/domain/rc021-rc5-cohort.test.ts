@@ -15,11 +15,11 @@ import rc5Manifest from '../../src/domain/rc5-byte-audit-manifest.js'
  */
 
 describe('rc.5 cohort qualification', () => {
-  it('keeps the rc.5/rc.3 rows as historical evidence below the 0.13.0 floor', () => {
-    // Since Guard 0.13.0 the ACTIVE cohort is the 0.2.2-rc.1 graph only; the
+  it('keeps the rc.5/rc.3 rows as historical evidence below the current floor', () => {
+    // Since Guard 0.13.2 the ACTIVE cohort is the 0.2.2-rc.3 graph only; the
     // reviewed rc.5/rc.3 cohorts stay in the historical evidence set and no
     // longer admit (their exact graphs refuse at the version gate).
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.2-core-v1'])
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.3-core-v1'])
     expect(EXPECTED_HOST_PACKAGES).not.toEqual(RC021_RC5_HOST_PACKAGES)
     const manifest = JSON.parse(readFileSync('manifests/supported-host.v1.json', 'utf8'))
     expect(manifest.historicalCohorts.map((row: { id: string }) => row.id)).toContain('dsh-0.2.1-rc.5-core-v1')
@@ -70,19 +70,22 @@ describe('rc.5 cohort qualification', () => {
     }
   })
 
-  it('enforces the 0.2.2-rc.2 floor; the 0.2.1 tuple stays below it', () => {
+  it('enforces the 0.2.2-rc.3 floor; the 0.2.1 tuple and 0.2.2-rc.2 stay below it', () => {
     // Historical floor semantics of this release line, kept as an oracle:
-    // 0.2.1-rc.3 < 0.2.1-rc.5 < 0.2.2-rc.1 by strict SemVer precedence, and
-    // the current floor only admits the 0.2.2-rc.1 tuple and above.
-    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.2')
-    expect(satisfiesSupportedHostRange('0.2.2-rc.2')).toBe(true)
+    // 0.2.1-rc.3 < 0.2.1-rc.5 < 0.2.2-rc.1 < 0.2.2-rc.2 by strict SemVer
+    // precedence, and the current floor only admits the 0.2.2-rc.3 tuple and
+    // above.
+    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.3')
+    expect(satisfiesSupportedHostRange('0.2.2-rc.3')).toBe(true)
     expect(satisfiesSupportedHostRange('0.2.2')).toBe(true)
+    expect(satisfiesSupportedHostRange('0.2.2-rc.2')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.4')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.2')).toBe(false)
     expect(compareHostVersions('0.2.1-rc.5', '0.2.1-rc.3')).toBeGreaterThan(0)
     expect(compareHostVersions('0.2.2-rc.1', '0.2.1-rc.5')).toBeGreaterThan(0)
+    expect(compareHostVersions('0.2.2-rc.3', '0.2.2-rc.2')).toBeGreaterThan(0)
   })
 
   it('keeps the rc.3 lib bytes as the rc.5 lib bytes (study invariant)', () => {

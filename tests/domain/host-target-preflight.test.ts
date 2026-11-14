@@ -49,7 +49,17 @@ vi.mock('../../src/domain/rc5-byte-audit-manifest.js', async (original) => {
     'lib/index.js': createHash('sha256').update('audited fixture bytes\n').digest('hex'),
   } })) } }
 })
-import { RC022_RC2_HOST_PACKAGES } from '../../src/domain/rc022-rc2-host.js'
+vi.mock('../../src/domain/rc022-rc3-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<{ name: string; version: string }> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map(row => ({ ...row, modules: {
+    'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, main: 'lib/index.js',
+      ...(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'].includes(row.name) ? { dsh: { bundle: { patch: './cordis.patch.yml' } } } : {}),
+    })).digest('hex'),
+    'lib/index.js': createHash('sha256').update('audited fixture bytes\n').digest('hex'),
+  } })) } }
+})
+import { RC022_RC3_HOST_PACKAGES } from '../../src/domain/rc022-rc3-host.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
 import { revalidateCoreLock } from '../../src/runtime.js'
@@ -59,14 +69,13 @@ import { revalidateCoreLock } from '../../src/runtime.js'
 
 const roots: string[] = []
 const bundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless']
-const version = RC022_RC2_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh')!.version!
+const version = RC022_RC3_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh')!.version!
 // The active core cohort already excludes dshmarket (market identity is not a
-// core lock input), so the fixture is the exact active graph plus the two
-// installation-owned Headless bundles. Graph readback iterates CRITICAL_NAMES,
-// which the resolver keeps sorted by name (the 0.2.2-rc.1 manifest publishes
-// its four new closure members after the reviewed rc.5 set), so the compared
+// core lock input), so the fixture is the exact active 0.2.2-rc.3 graph plus
+// the two installation-owned Headless bundles. Graph readback iterates
+// CRITICAL_NAMES, which the resolver keeps sorted by name, so the compared
 // expectation uses the same name order.
-const core = [...RC022_RC2_HOST_PACKAGES].sort((a, b) => a.name.localeCompare(b.name))
+const core = [...RC022_RC3_HOST_PACKAGES].sort((a, b) => a.name.localeCompare(b.name))
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 
 function json(path: string, value: unknown) {

@@ -73,7 +73,7 @@ for(const name of spec.lane==='resolve'?[]:spec.targets){
     '@deepseek-ai/dsh-commands':['CommandRuntime'],
     '@deepseek-ai/dsh-llm':['createUserMessage','createToolResultMessage'],
     '@deepseek-ai/dsh-session-persistence':['SessionPersistence','validateStoredEvents'],
-    '@deepseek-ai/dsh-session-persistence-jsonl':['default'],
+    '@deepseek-ai/dsh-session-persistence-jsonl':['apply'],
     '@deepseek-ai/dsh-session-projection':['SessionProjectionRegistry'],
     '@deepseek-ai/dsh-goal':['GoalService','decodeGoalChange'],
     '@deepseek-ai/dsh-tool-goal':['apply'],

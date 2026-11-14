@@ -10,12 +10,12 @@ If you ask DSH to edit a file and run its tests, Guard looks for a saved result 
 
 ## Install or upgrade
 
-Guard 0.13.1 requires DSH `0.2.2-rc.2`, Node.js `24.9.0`, Cordis `4.1.0` and pnpm `11` or later. Web, Headless and Desktop each have their own profile. The reviewed setup uses DSH `0.2.2-rc.2` and Cordis `4.1.0`. The `0.2.2-rc.1` host is below the minimum: upgrade DSH first, then Guard. Other versions that meet the minimum still need to pass the host checks.
+Guard 0.13.2 requires DSH `0.2.2-rc.3`, Node.js `24.9.0`, Cordis `4.1.0` and pnpm `11` or later. Web, Headless and Desktop each have their own profile. The reviewed setup uses DSH `0.2.2-rc.3` and Cordis `4.1.0`. Hosts at `0.2.2-rc.2` and below are under the minimum: upgrade DSH first, then Guard. Other versions that meet the minimum still need to pass the host checks.
 
 - **First installation.** Stop the host and follow the [installation guide](docs/GETTING_STARTED.md) for the profile you use. Install Guard, write the **host lock** that records the packages and locations the profile loads, then verify the resulting configuration before starting DSH.
 - **Upgrade with existing Guard sessions.** Stop the processes that write session data. Before replacing DSH or Guard, keep the old installation and the settings or records that establish each session's mode. Follow the [migration guide](docs/ACTIVATION_MIGRATION.md) to check the active storage directory and freeze the session inventory. After installing, rebuild and verify the host lock. Valid existing mode bindings are retained; adopt old modes only for sessions that need migration, then verify before restarting.
 
-DSH `0.2.2-rc.2` still ships Undici `8.11.2`. The [dependency advisories](docs/DEPENDENCY_SCAN.md) explain the remaining risks. The same three temporary Undici exceptions cover Guard 0.13.1 through **2026-11-30 inclusive**; the host remains affected.
+DSH `0.2.2-rc.3` still ships Undici `8.11.2`. The [dependency advisories](docs/DEPENDENCY_SCAN.md) explain the remaining risks and the recorded expiry of the three temporary Undici exceptions; the host remains affected.
 
 ## Start a task or return to one
 

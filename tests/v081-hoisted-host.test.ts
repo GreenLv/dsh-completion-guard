@@ -60,8 +60,26 @@ vi.mock('../src/domain/rc022-rc2-byte-audit-manifest.js', async (original) => {
     },
   })) } }
 })
-// The 0.2.2-rc.1 manifest is the DEFAULT audited baseline since Guard 0.13.0;
-// synthetic graphs in this file must cover it alongside the historical rows.
+vi.mock('../src/domain/rc022-rc3-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
+  const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map((p) => ({
+    ...p, sha256: '0'.repeat(64), tarball: '',
+    // The published audit hashes package.json too: the manifest the JSON
+    // parsers read and the bytes the digest check reads are the same file.
+    loadingDigest: hostManifestLoadingDigest(canonicalManifest(p.name as string, p.version as string)),
+    programs: { 'lib/index.js': hostProgramDigest(AUDITED_MODULE_TEXT) },
+    modules: {
+      'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
+      'lib/index.js': auditedModuleDigest,
+    },
+  })) } }
+})
+// The 0.2.2-rc.3 manifest is the DEFAULT audited baseline since Guard 0.13.2
+// (the sole active cohort); the historical rows above stay mocked so the
+// retained cohorts remain selectable evidence sources for the synthetic graphs.
 vi.mock('../src/domain/rc5-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')

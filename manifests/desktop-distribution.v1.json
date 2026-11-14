@@ -290,6 +290,23 @@
       "releaseSha512": "5rRAkVruKkm4KELAbTqV8ZFrMwSo3oESnzXb9ebkJWPCMe6WuHORQZR63uY+BqAc6sBdyBtwSelsCGh0k1NcJA==",
       "vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd.",
       "files": []
+    },
+    {
+      "id": "desktop-0.2.2-rc.3-darwin-arm64",
+      "platform": "darwin",
+      "arch": "arm64",
+      "version": "0.2.2-rc.3",
+      "runtimeVersion": "0.2.2-rc.3",
+      "pnpmVersion": "11.28.5",
+      "asarHeaderSha256": "a7765c467a2e0a9c047609bd6522db22f20abe82c970075aaed71fd381e15406",
+      "desktopManifestSha256": "09a24f154710583949e37c38ed6ae6509340538133bab8320ea5dbff424dceaf",
+      "buildCommit": "6b729fedde0c8fd03af7afdf5a711aa64fe87c3b",
+      "buildDirty": false,
+      "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.2-rc.3-mac-arm64.zip",
+      "releaseSha512": "UThWXKCqiiUnjFgij655+Gc1MgiSl+Ybl71jkQi48BhcBCN0XSDNT4GGmGJY3nvEqnkLT3LtWbL6wy6t/kRxIw==",
+      "vendorTeam": "NAN929V4UM",
+      "vendorIdentifier": "com.deepseek.dsh",
+      "files": []
     }
   ]
 }

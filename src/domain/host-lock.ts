@@ -1,6 +1,7 @@
 import { RC021_RC3_HOST_PACKAGES } from './rc021-rc3-host.js'
 import { RC021_RC5_HOST_PACKAGES } from './rc021-rc5-host.js'
 import { RC022_RC2_HOST_PACKAGES } from './rc022-rc2-host.js'
+import { RC022_RC3_HOST_PACKAGES } from './rc022-rc3-host.js'
 import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
@@ -110,13 +111,13 @@ function defineCohort(
 }
 
 /** Current baseline for new installations and default fixtures. Since Guard
- * 0.13.1 the active cohort set contains ONLY the 0.2.2-rc.2 graph: the
- * admission floor rose to >=0.2.2-rc.2 and the 0.2.2-rc.1 graph is a
+ * 0.13.2 the active cohort set contains ONLY the 0.2.2-rc.3 graph: the
+ * admission floor rose to >=0.2.2-rc.3 and the 0.2.2-rc.2 graph is a
  * historical upgrade source below the raised floor — its audited manifest
- * (`rc022-rc1-host.ts` rows) keeps the recorded historical identity but no
- * longer admits through the active set. The rc.5 and rc.3 cohorts remain
- * historical evidence below the floor. */
-export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.2-rc.2'
+ * (`rc022-rc2-host.ts` rows) keeps the recorded historical identity but no
+ * longer admits through the active set. The rc.5, rc.3 and 0.2.2-rc.2
+ * cohorts remain historical evidence below the floor. */
+export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.2-rc.3'
 export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
 
 /** Core-lock/v1 separates optional market identity from the audited critical
@@ -124,10 +125,12 @@ export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
  * identity is separate from native acceptance of a Guard artifact.
  */
 export const HOST_COHORTS: readonly HostCohort[] = [
-  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.2-rc.2'], [], RC022_RC2_HOST_PACKAGES,
+  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.2-rc.3'], [], RC022_RC3_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
   // Historical evidence rows below the current floor; filtered out of the
-  // active set and retained for the recorded rc.3/rc.5 evidence paths.
+  // active set and retained for the recorded rc.2/rc.3/rc.5 evidence paths.
+  defineCohort('dsh-0.2.2-rc.2', ['0.2.2-rc.2'], [], RC022_RC2_HOST_PACKAGES,
+    'registry-derived-pending-native-audit', ['posix', 'windows']),
   defineCohort('dsh-0.2.1-rc.5', ['0.2.1-rc.5'], [], RC021_RC5_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
   defineCohort('dsh-0.2.1-rc.3', ['0.2.1-rc.3'], [], RC021_RC3_HOST_PACKAGES,

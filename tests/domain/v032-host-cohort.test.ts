@@ -18,6 +18,7 @@ import { RC021_RC3_HOST_PACKAGES } from '../../src/domain/rc021-rc3-host.js'
 import { RC021_RC5_HOST_PACKAGES } from '../../src/domain/rc021-rc5-host.js'
 import { RC022_RC1_HOST_PACKAGES } from '../../src/domain/rc022-rc1-host.js'
 import { RC022_RC2_HOST_PACKAGES } from '../../src/domain/rc022-rc2-host.js'
+import { RC022_RC3_HOST_PACKAGES } from '../../src/domain/rc022-rc3-host.js'
 import { LEGACY_HOST_COHORTS as HOST_COHORTS, ALPHA2_HOST_PACKAGES, ALPHA2_DSHMARKET_139_HOST_PACKAGES } from '../helpers/historical-host.js'
 import {
   MIN_SUPPORTED_HOST_VERSION,
@@ -142,18 +143,18 @@ describe('audited host cohort registry', () => {
     expect(cohort.auditProvenance).toBe('registry-derived-pending-native-audit')
     // The real active evaluation never reports the native-audited identity,
     // and its own digest is a stable, deterministic host identity.
-    const evaluation = evaluateHostLock(RC022_RC2_HOST_PACKAGES, context)
+    const evaluation = evaluateHostLock(RC022_RC3_HOST_PACKAGES, context)
     expect(evaluation.status).toBe('supported')
     expect(evaluation.digest).toMatch(/^[0-9a-f]{64}$/)
-    expect(evaluateHostLock(RC022_RC2_HOST_PACKAGES, context).digest).toBe(evaluation.digest)
+    expect(evaluateHostLock(RC022_RC3_HOST_PACKAGES, context).digest).toBe(evaluation.digest)
     expect(evaluation.digest).not.toBe(native)
   })
 
-  it('selects the active 0.2.2-rc.1 cohort atomically and closes every historical cohort', () => {
-    // Guard 0.13.0 support policy: the active allowlist is exactly
-    // 0.2.2-rc.1. Historical audited graphs keep their identities in
+  it('selects the active 0.2.2-rc.3 cohort atomically and closes every historical cohort', () => {
+    // Guard 0.13.2 support policy: the active allowlist is exactly
+    // 0.2.2-rc.3. Historical audited graphs keep their identities in
     // LEGACY_HOST_COHORTS as verification data but are no longer active
-    // support entries.
+    // support entries; the retired 0.2.2-rc.2 rows stay a below-floor refusal.
     const active = selectHostCohort(EXPECTED_HOST_PACKAGES)
     expect(active.consistent).toBe(true)
     expect(active.cohort.id).toBe(ACTIVE_COHORT_ID)
@@ -169,9 +170,15 @@ describe('audited host cohort registry', () => {
     const belowFloor = evaluateHostLock(RC021_RC5_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(belowFloor.status).toBe('unsupported')
     expect(belowFloor.reasonCode).toBe('host_lock_version_mismatch')
-    const current = evaluateHostLock(RC022_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    const current = evaluateHostLock(RC022_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(current).toMatchObject({ status: 'supported', cohortId: ACTIVE_COHORT_ID })
     expect(current.capabilities.web_control.status).toBe('supported')
+    // Bare evaluation reports the cohort-selection failure for the retired
+    // graph; the configured entry applies the version gate (below_minimum),
+    // asserted in the floor suite.
+    const retired = evaluateHostLock(RC022_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    expect(retired.status).toBe('unsupported')
+    expect(retired.reasonCode).toBe('host_lock_version_mismatch')
     // CG-DSH-001: the audited cohort is one indivisible whole-graph contract;
     // a graph missing audited rows never selects consistently.
     const baseOnly = selectHostCohort(EXPECTED_HOST_PACKAGES.filter((row) => BASE_HOST_PACKAGES.has(row.name)))
@@ -222,11 +229,11 @@ describe('audited host cohort registry', () => {
     // difference from a natively audited cohort is reported through
     // `auditProvenance`, never hidden.
     for (const platform of ['posix', 'windows'] as const) {
-      expect(selectHostCohort(RC022_RC2_HOST_PACKAGES, platform)).toMatchObject({
+      expect(selectHostCohort(RC022_RC3_HOST_PACKAGES, platform)).toMatchObject({
         consistent: true,
         cohort: { id: ACTIVE_COHORT_ID },
       })
-      const evaluation = evaluateHostLock(RC022_RC2_HOST_PACKAGES, { platform, profileKind: 'web' })
+      const evaluation = evaluateHostLock(RC022_RC3_HOST_PACKAGES, { platform, profileKind: 'web' })
       expect(evaluation).toMatchObject({ status: 'supported', cohortId: ACTIVE_COHORT_ID })
       expect(evaluation.auditProvenance).toBe('registry-derived-pending-native-audit')
     }
@@ -283,10 +290,10 @@ describe('audited host cohort registry', () => {
   })
 
   it('binds hostLockDigest to the active cohort so a cohort switch stales old certificates', () => {
-    const current = evaluateHostLock(RC022_RC2_HOST_PACKAGES, { platform: 'posix' })
+    const current = evaluateHostLock(RC022_RC3_HOST_PACKAGES, { platform: 'posix' })
     expect(current.status).toBe('supported')
     expect(current.digest).toMatch(/^[0-9a-f]{64}$/)
-    const again = evaluateHostLock(RC022_RC2_HOST_PACKAGES, { platform: 'posix' })
+    const again = evaluateHostLock(RC022_RC3_HOST_PACKAGES, { platform: 'posix' })
     expect(again.digest).toBe(current.digest)
     for (const historical of [
       rc2Cohort.packages, alpha2Cohort.packages, ALPHA2_DSHMARKET_139_HOST_PACKAGES,
@@ -310,19 +317,19 @@ describe('audited host cohort registry', () => {
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tool-goal', '@deepseek-ai/dsh-tools']) {
       expect(peers[name]).toBe(SUPPORTED_HOST_RANGE)
     }
-    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.2-rc.2')
-    for (const version of ['0.2.2-rc.2', '0.2.2', '0.3.0', '1.0.0']) {
+    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.2-rc.3')
+    for (const version of ['0.2.2-rc.3', '0.2.2', '0.3.0', '1.0.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
-    for (const version of ['0.1.5', '0.1.6', '0.1.6-rc.1', '0.1.7-rc.2', '0.1.8-rc.2', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.1']) {
+    for (const version of ['0.1.5', '0.1.6', '0.1.6-rc.1', '0.1.7-rc.2', '0.1.8-rc.2', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.1', '0.2.2-rc.2']) {
       expect(satisfiesSupportedHostRange(version)).toBe(false)
     }
     expect(Object.values(peers)).not.toContain('*')
     expect(Object.values(peers).some((range) => /0\.1\.1|alpha/.test(range))).toBe(false)
     // Development dependencies run on an admitted host version at or above
-    // the current 0.2.2-rc.2 floor.
+    // the current 0.2.2-rc.3 floor.
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tools']) {
-      expect(manifest.devDependencies[name]).toBe('0.2.2-rc.2')
+      expect(manifest.devDependencies[name]).toBe('0.2.2-rc.3')
       expect(satisfiesSupportedHostRange(manifest.devDependencies[name]!)).toBe(true)
     }
   })
@@ -330,7 +337,7 @@ describe('audited host cohort registry', () => {
 
 describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
   // Historical dshmarket combinations keep their audited identities, but the
-  // active allowlist is 0.2.2-rc.2-only: every historical combination fails
+  // active allowlist is 0.2.2-rc.3-only: every historical combination fails
   // closed instead of locking supported, on both platforms.
   const historicalCombinations = [
     { label: 'rc.2 + dshmarket 1.36.0', rows: rc2Cohort.packages },
@@ -349,9 +356,9 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     })
   }
 
-  it('locks the 0.2.2-rc.2 core as the supported web_control target on both platforms', () => {
+  it('locks the 0.2.2-rc.3 core as the supported web_control target on both platforms', () => {
     for (const platform of ['posix', 'windows'] as const) {
-      const evaluation = evaluateHostLock(RC022_RC2_HOST_PACKAGES, { platform, profileKind: 'web' })
+      const evaluation = evaluateHostLock(RC022_RC3_HOST_PACKAGES, { platform, profileKind: 'web' })
       expect(evaluation).toMatchObject({ status: 'supported', cohortId: ACTIVE_COHORT_ID })
       expect(evaluation.capabilities.web_control.status).toBe('supported')
       expect(evaluateHostCapability(evaluation, { action: 'apply', platform, profileKind: 'web' }).status).toBe('supported')
@@ -364,10 +371,10 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     // stays closed regardless of which market row accompanies it.
     const marketRow = rc1Cohort.packages.find((row) => row.name === 'dshmarket')!
     for (const extra of [[marketRow], [{ name: 'dshmarket', version: '99.0.0', integrity: 'sha512-drift' }]]) {
-      const evaluation = evaluateHostLock([...RC022_RC2_HOST_PACKAGES, ...extra], { platform: 'posix', profileKind: 'web' })
+      const evaluation = evaluateHostLock([...RC022_RC3_HOST_PACKAGES, ...extra], { platform: 'posix', profileKind: 'web' })
       expect(evaluation.status).toBe('supported')
       expect(evaluation.reasonCode).toBeUndefined()
-      expect(evaluation.digest).toBe(evaluateHostLock(RC022_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).digest)
+      expect(evaluation.digest).toBe(evaluateHostLock(RC022_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).digest)
     }
     for (const historical of [alpha3Cohort, rc1Cohort]) {
       const mixed = historical.packages.map((row) => row.name === 'dshmarket' ? marketRow : row)
@@ -387,11 +394,11 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
   })
 
   it('fails web_control projection closed when the web graph rows are missing or drifted', () => {
-    const withoutWebApp = RC022_RC2_HOST_PACKAGES.filter((row) => row.name !== '@deepseek-ai/dsh-web-app')
+    const withoutWebApp = RC022_RC3_HOST_PACKAGES.filter((row) => row.name !== '@deepseek-ai/dsh-web-app')
     const missing = evaluateHostLock(withoutWebApp, { platform: 'posix', profileKind: 'web' })
     expect(missing.status).toBe('unavailable')
     expect(missing.reasonCode).toBe('host_lock_missing')
-    const drifted = RC022_RC2_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-web-app'
+    const drifted = RC022_RC3_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-web-app'
       ? { ...row, integrity: 'sha512-drift' }
       : row)
     const driftedEvaluation = evaluateHostLock(drifted, { platform: 'posix', profileKind: 'web' })
@@ -402,8 +409,9 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
 
 describe('core lock policy identity', () => {
   it('exports only the active exact DSH core with an explicit new manifest policy', () => {
-    // Guard 0.13.0: the active set is the 0.2.2-rc.1 core only; the rc.5 and
-    // rc.3 rows stay historical evidence below the raised floor.
+    // Guard 0.13.2: the active set is the 0.2.2-rc.3 core only; the rc.5,
+    // 0.2.1-rc.3 and retired 0.2.2-rc.2 rows stay historical evidence below
+    // the raised floor.
     expect(CORE_HOST_COHORTS).toHaveLength(1)
     expect(CORE_HOST_COHORTS[0].id).toBe(ACTIVE_COHORT_ID)
     for (const core of CORE_HOST_COHORTS) {

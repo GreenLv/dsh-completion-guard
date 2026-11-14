@@ -73,13 +73,13 @@ describe('shipped artifact entries', () => {
     const rows = domain.RC021_RC5_HOST_PACKAGES as Array<{ name: string; version?: string; integrity?: string }>
     expect(rows).toHaveLength(47)
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
-    expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.2-rc.2')
-    expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.2')
+    expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.2-rc.3')
+    expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.3')
     // The floor-based admission model: the public range is >=, and the
     // validated-versions list is evidence, not an admission whitelist.
-    expect(domain.SUPPORTED_HOST_RANGE).toBe('>=0.2.2-rc.2')
-    expect(domain.HOST_VALIDATED_VERSIONS).toEqual(['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.2'])
-    expect(domain.LATEST_TESTED_HOST_VERSION).toBe('0.2.2-rc.2')
+    expect(domain.SUPPORTED_HOST_RANGE).toBe('>=0.2.2-rc.3')
+    expect(domain.HOST_VALIDATED_VERSIONS).toEqual(['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3'])
+    expect(domain.LATEST_TESTED_HOST_VERSION).toBe('0.2.2-rc.3')
   })
 
   it('evaluates the active cohort from the shipped bytes, provenance included', async () => {
@@ -91,12 +91,12 @@ describe('shipped artifact entries', () => {
       evaluateHostLock: (rows: unknown[], context: unknown) => { status: string; cohortId?: string; auditProvenance?: string; reasonCode?: string }
       selectHostCohort: (rows: unknown[], platform?: string) => { consistent: boolean }
     }
-    // The shipped active cohort is the exact 0.2.2-rc.2 core, accepted on both
+    // The shipped active cohort is the exact 0.2.2-rc.3 core, accepted on both
     // platforms with its registry-derived provenance.
     const evaluation = domain.evaluateHostLock(domain.EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(evaluation).toMatchObject({
       status: 'supported',
-      cohortId: 'dsh-0.2.2-rc.2-core-v1',
+      cohortId: 'dsh-0.2.2-rc.3-core-v1',
       auditProvenance: 'registry-derived-pending-native-audit',
     })
     // The rc.5/rc.3/rc.2 graphs are historical evidence below the raised
@@ -132,7 +132,7 @@ describe('shipped artifact entries', () => {
   })
 
   it('advertises only entry points that exist in the built tree', () => {
-    expect(manifest.version).toBe('0.13.1')
+    expect(manifest.version).toBe('0.13.2')
     expect(manifest.main).toBe('dist/index.js')
     for (const [subpath, target] of Object.entries(manifest.exports)) {
       for (const field of ['types', 'default'] as const) {

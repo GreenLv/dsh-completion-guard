@@ -345,9 +345,15 @@ function probeDependencyIdentity(runtime: string, profile: string, name: string,
       if (!existsSync(join(graphRoot, 'node_modules'))) continue
       const graphModules = realpathSync(join(graphRoot, 'node_modules'))
       const graph = activeGraphRecords(readFileSync(join(graphModules, '.package-map.json'), 'utf8'))
+      // The graph may legitimately hold several resolved versions of one
+      // dependency (rc.3 installs e.g. https-proxy-agent@7 and @9 side by
+      // side). The exact identity is the reachable record whose installed
+      // root equals the importer-resolved package root, not a graph-wide
+      // unique name.
       const ids = [...graph.reachable].filter((key) => key === name || key.startsWith(name + '@'))
-      if (ids.length !== 1 || typeof graph.records[ids[0]]?.url !== 'string'
-        || realpathSync(resolve(graphModules, graph.records[ids[0]].url as string)) !== packageRoot) continue
+      const match = ids.find((id) => typeof graph.records[id]?.url === 'string'
+        && realpathSync(resolve(graphModules, graph.records[id].url as string)) === packageRoot)
+      if (!match) continue
       if (!within(graphModules, packageRoot)) continue
       const manifest = readJsonObject(join(packageRoot, 'package.json'), 'host_contract_probe_dependency_unbound')
       const matches = packageRowsFromPnpmLock(readFileSync(join(graphRoot, 'pnpm-lock.yaml'), 'utf8'), [name])
@@ -509,14 +515,20 @@ const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, Readonly<Record<string, 
   '@deepseek-ai/dsh-tool-bash': {
     '0.2.2-rc.1': 'ae6be2d8b287b5e410d026acd2fdfc553ebb95565f7b361029c7fb5bcda5fd27',
     '0.2.2-rc.2': '8fb836a65eb633f85aa8b1b079fb306866e597fe8f4987c2205b5c4482df57de',
+    // rc.3 keeps every foreground tool's lib bytes (only dsh-official-bundles
+    // changed published bytes in rc.2→rc.3); the row re-binds the same digest
+    // from the rc.3 study's verified tarballs.
+    '0.2.2-rc.3': '8fb836a65eb633f85aa8b1b079fb306866e597fe8f4987c2205b5c4482df57de',
   },
   '@deepseek-ai/dsh-tool-pwsh': {
     '0.2.2-rc.1': '157aa3964db76e64d3013e63daed72a61d7fc5f86b247b0103753290d7dd6ed9',
     '0.2.2-rc.2': '03a29fb9cff987662c14ab925a37ff4ae8b1ec3cce21f8af9c44eec7dd4c66eb',
+    '0.2.2-rc.3': '03a29fb9cff987662c14ab925a37ff4ae8b1ec3cce21f8af9c44eec7dd4c66eb',
   },
   '@deepseek-ai/dsh-shell': {
     '0.2.2-rc.1': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
     '0.2.2-rc.2': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
+    '0.2.2-rc.3': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
   },
 }
 
@@ -531,26 +543,43 @@ const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, Readonly<Record<str
   '@deepseek-ai/dsh-working-directory': {
     '0.2.2-rc.1': '76b2f53517bc3312084bc062ce8bbc4111f3b723d96da080157046c2b6d4766a',
     '0.2.2-rc.2': '03cb7ebdaa8b97cfc3170320d04446b99ce939349696289b49549d1e96cea59b',
+    // rc.3 keeps these lib bytes (rc.2→rc.3 only changes dsh-official-bundles
+    // and rewritten manifests); the row re-binds the same digest from the
+    // rc.3 study's verified tarballs.
+    '0.2.2-rc.3': '03cb7ebdaa8b97cfc3170320d04446b99ce939349696289b49549d1e96cea59b',
   },
   '@deepseek-ai/dsh-sandbox-policy': {
     '0.2.2-rc.1': '8eb1674f9c3c2e336efae7ecc734d5197dc8b80bc29f1f1d61bfe0b5a1472188',
     '0.2.2-rc.2': '6c229f24f4b9ad67790ab5c8d1695e1ed538c0354955494bedd0dbe836debec4',
+    '0.2.2-rc.3': '6c229f24f4b9ad67790ab5c8d1695e1ed538c0354955494bedd0dbe836debec4',
   },
   '@deepseek-ai/dsh-sandbox': {
     '0.2.2-rc.1': '9ece3e7b04d5526441e2439431d769acf67abc46fa49de000dd9c792893eb5e7',
     '0.2.2-rc.2': 'dcf74e4cea1a0dbd8bfeaa1b454619b55aab83f3b3b761f0534165f0ac05f138',
+    '0.2.2-rc.3': 'dcf74e4cea1a0dbd8bfeaa1b454619b55aab83f3b3b761f0534165f0ac05f138',
   },
   '@deepseek-ai/dsh-bash-sandbox': {
     '0.2.2-rc.1': '0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d',
     '0.2.2-rc.2': '0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d',
+    '0.2.2-rc.3': '0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d',
   },
   '@deepseek-ai/dsh-bash-local': {
     '0.2.2-rc.1': '6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb',
     '0.2.2-rc.2': '6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb',
+    '0.2.2-rc.3': '6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb',
   },
   '@deepseek-ai/dsh-pwsh-local': {
     '0.2.2-rc.1': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',
     '0.2.2-rc.2': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',
+    '0.2.2-rc.3': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',
+  },
+  '@deepseek-ai/dsh-pwsh-sandbox': {
+    '0.2.2-rc.2': 'bed19d2cea875b152f9e811116b59c2a45e6711b1c6cf1d8bacc4d20e15c6783',
+    '0.2.2-rc.3': 'bed19d2cea875b152f9e811116b59c2a45e6711b1c6cf1d8bacc4d20e15c6783',
+  },
+  '@deepseek-ai/dsh-subprocess-local': {
+    '0.2.2-rc.2': '152b009a77e0b5f846af5a86b25a35346c9aca5f380c82054a35bde722500752',
+    '0.2.2-rc.3': '152b009a77e0b5f846af5a86b25a35346c9aca5f380c82054a35bde722500752',
   },
 }
 
@@ -1139,22 +1168,38 @@ export async function prepareDesktopHostTrust(appAsarPath: string, profileRoot: 
   const qualified: PackageRow[] = []
   for (const row of runtime.rows) {
     if (!row.version) throw new HostTrustError('host_trust_identity_invalid')
-    const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(row.name)}/${encodeURIComponent(row.version)}`,
-      { signal: AbortSignal.timeout(30_000), redirect: 'error' })
-    if (!response.ok) throw new HostTrustError('host_trust_registry_unavailable')
-    const metadata = await response.json() as { name?: string; version?: string; dist?: { integrity?: string } }
-    const integrity = metadata.dist?.integrity
-    if (metadata.name !== row.name || metadata.version !== row.version || typeof integrity !== 'string') {
-      throw new HostTrustError('host_trust_registry_identity_mismatch')
-    }
-    qualified.push({ name: row.name, version: row.version, integrity })
+    qualified.push({ name: row.name, version: row.version, integrity: await desktopDependencyIntegrity(row.name, row.version, fetcher) })
   }
   return acquireHostTrust(qualified, fetcher, {
     profileRoot,
     // Every probe dependency the consumed adapters import resolves from the
-    // same official app graph, by exact top-level manifest identity.
-    dependencyIdentity: (name) => readDesktopDependency(appAsarPath, name),
+    // same official app graph, by exact top-level manifest identity, and is
+    // then completed with the trusted registry integrity for exactly that
+    // name@version. The app graph supplies the IDENTITY; only the trusted
+    // registry supplies the SRI — the graph never asserts integrity itself.
+    dependencyIdentity: async (name) => {
+      const identity = readDesktopDependency(appAsarPath, name)
+      if (!identity.version) throw new HostTrustError('host_trust_identity_invalid')
+      return { ...identity, integrity: await desktopDependencyIntegrity(identity.name, identity.version, fetcher) }
+    },
   })
+}
+
+/** The trusted registry SRI for one exact name@version read from the app
+ * graph. The registry metadata must agree with the graph identity on both
+ * fields before its dist.integrity is accepted; a missing or mismatching
+ * identity fails closed instead of relaxing the integrity requirement. */
+async function desktopDependencyIntegrity(name: string, version: string,
+  fetcher: typeof fetch = fetch): Promise<string> {
+  const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
+    { signal: AbortSignal.timeout(30_000), redirect: 'error' })
+  if (!response.ok) throw new HostTrustError('host_trust_registry_unavailable')
+  const metadata = await response.json() as { name?: string; version?: string; dist?: { integrity?: string } }
+  const integrity = metadata.dist?.integrity
+  if (metadata.name !== name || metadata.version !== version || typeof integrity !== 'string') {
+    throw new HostTrustError('host_trust_registry_identity_mismatch')
+  }
+  return integrity
 }
 
 function readJsonObject(path: string, code: string): Record<string, unknown> {

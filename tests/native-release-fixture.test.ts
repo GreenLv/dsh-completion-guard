@@ -22,10 +22,12 @@ it('runs the actual release fixture with exact-version registry responses, in-fl
     for (const name of ['dsh-session', 'dsh-llm']) link(join(repository, 'node_modules', '@deepseek-ai', name), join(runtimeRoot, 'node_modules', '@deepseek-ai', name))
     mkdirSync(join(profileRoot, 'node_modules'), { recursive: true })
     link(repository, join(profileRoot, 'node_modules', 'dsh-completion-guard'))
-    const manifest = JSON.parse(readFileSync(join(repository, 'manifests', 'supported-host.v1.json'), 'utf8'))
-    // The linked SDK modules come from this repository's installed 0.2.2-rc.1
-    // devDependencies, so the fixture locks against the active cohort graph.
-    const hostPackages = manifest.cohorts.find((row: { id: string }) => row.id === 'dsh-0.2.2-rc.2-core-v1').packages
+    const audit = JSON.parse(readFileSync(join(repository, 'manifests', 'rc022-rc3-byte-audit.json'), 'utf8')) as { packages: Array<{ name: string; version: string; integrity: string }> }
+    // The linked SDK modules come from this repository's installed 0.2.2-rc.3
+    // devDependencies, so the fixture locks against the active 0.2.2-rc.3
+    // cohort graph, whose exact registry-verified identities the rc.3
+    // byte-audit manifest binds.
+    const hostPackages = audit.packages.map(({ name, version, integrity }) => ({ name, version, integrity }))
     const result = await runNativeReleaseFixture({ runtimeRoot, profileRoot, workRoot: join(root, 'work'), nonce: 'owning-release', profile: 'web', hostPackages })
     expect(result).toEqual({ positive: true, negative: true, mock_only: true })
   } finally { vi.unstubAllEnvs(); rmSync(root, { recursive: true, force: true }) }

@@ -6,33 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../src/domain/host-desktop-identity.js', () => ({
   verifyDesktopCarrier: (archive: string) => archive,
 }))
-vi.mock('../src/domain/rc5-byte-audit-manifest.js', async (original) => {
-  const { createHash } = await import('node:crypto')
-  const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
-  const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
-  const packages = source.default.packages.map((row) => ({
-    ...row,
-    modules: {
-      'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, type: 'module', main: 'lib/index.js' }) + '\n', 'utf8').digest('hex'),
-      'lib/index.js': libDigest,
-    },
-  }))
-  return { default: { ...source.default, packages } }
-})
-vi.mock('../src/domain/rc022-rc1-byte-audit-manifest.js', async (original) => {
-  const { createHash } = await import('node:crypto')
-  const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
-  const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
-  const packages = source.default.packages.map((row) => ({
-    ...row,
-    modules: {
-      'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, type: 'module', main: 'lib/index.js' }) + '\n', 'utf8').digest('hex'),
-      'lib/index.js': libDigest,
-    },
-  }))
-  return { default: { ...source.default, packages } }
-})
-vi.mock('../src/domain/rc022-rc2-byte-audit-manifest.js', async (original) => {
+vi.mock('../src/domain/rc022-rc3-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
   const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
@@ -50,7 +24,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 
-import { RC022_RC2_HOST_PACKAGES } from '../src/domain/rc022-rc2-host.js'
+import { RC022_RC3_HOST_PACKAGES } from '../src/domain/rc022-rc3-host.js'
 import {
   readDesktopTargetGraph,
   DESKTOP_PROFILE_PACKAGE_NAME,
@@ -116,12 +90,14 @@ function buildAsar(files: readonly AsarFileSpec[]): Buffer {
   return Buffer.concat([prefix, json, padding, Buffer.concat(files.map((file) => file.content))])
 }
 
-/** The current admitted Desktop graph: DSH 0.2.2-rc.2 (floor `>=0.2.2-rc.2`),
- * built from the 0.2.2-rc.2 audited cohort rows (Cordis 4.1.0). */
-const RC_VERSION = '0.2.2-rc.2'
-/** Formerly admitted rc.5: historical evidence below the raised floor, used
- * here only to assert sub-floor refusal (DM10). */
+/** The current admitted Desktop graph: DSH 0.2.2-rc.3 (floor `>=0.2.2-rc.3`),
+ * built from the 0.2.2-rc.3 audited cohort rows (Cordis 4.1.0). */
+const RC_VERSION = '0.2.2-rc.3'
+/** Historical evidence below the raised floor: the formerly admitted rc.5 and
+ * the 0.13.1-era rc.2 upgrade source, used here only to assert sub-floor
+ * refusal (DM10). */
 const RETIRED_RC5_VERSION = '0.2.1-rc.5'
+const RETIRED_RC2_VERSION = '0.2.2-rc.2'
 const PLUGIN_VERSION = '0.8.4'
 const OFFICIAL_DESKTOP_BUNDLES = [
   '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app',
@@ -135,7 +111,7 @@ function makeDesktopMetadata(): Record<string, unknown> {
     platform: 'darwin',
     arch: 'arm64',
     sharedPackages: [],
-    files: RC022_RC2_HOST_PACKAGES.flatMap((row) => [
+    files: RC022_RC3_HOST_PACKAGES.flatMap((row) => [
       { path: `node_modules/${row.name}/package.json`, bytes: 10, sha256: createHash('sha256').update(syntheticManifestBytes(row.name, row.version as string)).digest('hex'), executable: false },
       { path: `node_modules/${row.name}/lib/index.js`, bytes: 30, sha256: SYNTHETIC_MODULES['lib/index.js'], executable: false },
     ]),
@@ -150,14 +126,14 @@ function bundleFileSpecs(options?: { hostVersion?: string; metadata?: Record<str
     private: true,
     version: hostVersion,
     type: 'module',
-    dependencies: Object.fromEntries(RC022_RC2_HOST_PACKAGES.map((row) => [row.name, row.version])),
+    dependencies: Object.fromEntries(RC022_RC3_HOST_PACKAGES.map((row) => [row.name, row.version])),
   }
   const files: AsarFileSpec[] = [
     { path: 'dsh/package.json', content: Buffer.from(JSON.stringify(manifest), 'utf8') },
     { path: 'dsh/desktop-runtime.json', content: Buffer.from(JSON.stringify(metadata), 'utf8') },
     { path: 'dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js', content: Buffer.from('export {}\n', 'utf8') },
   ]
-  for (const row of RC022_RC2_HOST_PACKAGES) {
+  for (const row of RC022_RC3_HOST_PACKAGES) {
     files.push({ path: `dsh/node_modules/${row.name}/package.json`, content: syntheticManifestBytes(row.name, row.version as string) })
     files.push({ path: `dsh/node_modules/${row.name}/lib/index.js`, content: Buffer.from(SYNTHETIC_LIB_BYTES, 'utf8') })
   }
@@ -482,10 +458,16 @@ describe('DM07–DM11 fail-closed identity and implementation gates', () => {
     const stale = writeAsar(bundleFileSpecs({ hostVersion: '0.2.0-rc.1' }), root)
     expect(() => resolveActiveProfileHostLock(stale, profile, PLUGIN_VERSION)).toThrowError(/admitted host version/)
     // The formerly admitted rc.5 runtime is historical evidence below the
-    // 0.13.0 floor (`>=0.2.2-rc.1`): the active entry refuses it at the
+    // raised floor (`>=0.2.2-rc.3`): the active entry refuses it at the
     // version gate like any other sub-floor host, market or no market.
     const retired = writeAsar(bundleFileSpecs({ hostVersion: RETIRED_RC5_VERSION }), root)
     expect(() => resolveActiveProfileHostLock(retired, profile, PLUGIN_VERSION))
+      .toThrowError(expect.objectContaining({ code: 'desktop_host_version_below_minimum' }))
+    // The 0.13.1-era rc.2 graph is the documented upgrade source below the
+    // 0.13.2 floor (`>=0.2.2-rc.3`): its recorded historical identity never
+    // reopens admission either.
+    const retiredRc2 = writeAsar(bundleFileSpecs({ hostVersion: RETIRED_RC2_VERSION }), root)
+    expect(() => resolveActiveProfileHostLock(retiredRc2, profile, PLUGIN_VERSION))
       .toThrowError(expect.objectContaining({ code: 'desktop_host_version_below_minimum' }))
     const corrupted = join(root, 'corrupted.asar')
     writeFileSync(corrupted, Buffer.from('not an asar archive'))
@@ -512,7 +494,7 @@ describe('DM07–DM11 fail-closed identity and implementation gates', () => {
     const profile = writeDesktopProfile(root, {
       dirName: 'local-drift', withModules: true, dependencies: { 'dsh-completion-guard': PLUGIN_VERSION },
     })
-    const row = RC022_RC2_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-session')!
+    const row = RC022_RC3_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-session')!
     const packageRoot = join(profile, 'node_modules', row.name)
     mkdirSync(join(packageRoot, 'lib'), { recursive: true })
     writeFileSync(join(packageRoot, 'package.json'), syntheticManifestBytes(row.name, row.version!))

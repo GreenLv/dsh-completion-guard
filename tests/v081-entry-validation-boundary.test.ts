@@ -59,9 +59,23 @@ vi.mock('../src/domain/rc022-rc2-byte-audit-manifest.js', async (original) => {
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
   return { default: { ...source.default, packages: source.default.packages.map((p) => ({
     ...p, sha256: '0'.repeat(64), tarball: '',
+    // Same synthetic-byte contract as the rc.3/rc.5 mocks above; retained as a
+    // historical evidence source below the current floor.
+    modules: {
+      'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
+      'lib/index.js': auditedModuleDigest,
+    },
+  })) } }
+})
+vi.mock('../src/domain/rc022-rc3-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map((p) => ({
+    ...p, sha256: '0'.repeat(64), tarball: '',
     // Same synthetic-byte contract as the rc.3/rc.5 mocks above; since Guard
-    // 0.13.0 this manifest is the DEFAULT baseline, so the fixture must cover
-    // it for the synthetic graph to qualify.
+    // 0.13.2 this manifest is the DEFAULT baseline and the sole active cohort,
+    // so the fixture must cover it for the synthetic graph to qualify.
     modules: {
       'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
       'lib/index.js': auditedModuleDigest,
@@ -88,7 +102,7 @@ import { DEFAULT_HOST_LOCK, evaluateHostLock, EXPECTED_HOST_PACKAGES, type HostL
 // validations one attach, one resume, one plain sync, and two adjacent
 // security-sensitive entries perform, and that a host mutated between two
 // consecutive authorized entries is refused by the second one. Published-byte
-// integrity against the real rc.2 tarballs stays with v080-rc017-host.test.ts;
+// integrity against the real rc.3 tarballs stays with v080-rc017-host.test.ts;
 // here the byte-audit manifest is narrowed to one synthetic audited module per
 // package so the byte-hash, export, route and symlink checks run for real.
 

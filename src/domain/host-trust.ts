@@ -5,6 +5,7 @@ import rc3Baseline from './rc3-byte-audit-manifest.js'
 import rc5Baseline from './rc5-byte-audit-manifest.js'
 import rc022rc1Baseline from './rc022-rc1-byte-audit-manifest.js'
 import rc022rc2Baseline from './rc022-rc2-byte-audit-manifest.js'
+import rc022rc3Baseline from './rc022-rc3-byte-audit-manifest.js'
 import type { ByteAuditManifest } from './byte-audit-manifest.js'
 import type { PackageRow } from './digest.js'
 import { mkdirSync, readFileSync, writeFileSync, lstatSync, realpathSync, existsSync } from 'node:fs'
@@ -31,9 +32,11 @@ export interface HostRebindTrust {
   unqualifiedOptionalPackages?: string[]
 }
 export class HostTrustError extends Error {
-  constructor(readonly code: string) { super(code); this.name = 'HostTrustError' }
+  /** Sanitized failure context (package/identity/member names and the rejected
+   * condition). Never carries credentials, profiles or transport details. */
+  constructor(readonly code: string, readonly detail?: string) { super(code); this.name = 'HostTrustError' }
 }
-const fail = (code: string): never => { throw new HostTrustError(code) }
+const fail = (code: string, detail?: string): never => { throw new HostTrustError(code, detail) }
 
 interface ContractReceipt {
   schema: typeof HOST_CONTRACT_SCHEMA
@@ -79,30 +82,33 @@ function readReceipt(profileRoot: string | undefined, trust: HostRebindTrust): C
  * official-bundle constants move), so it is its own reference; the 0.2.2-rc.2
  * graph changed further real bytes (session batch append, tool error
  * identity, working-directory access waterfall, sandbox-policy session
- * grants, jobs error codes), so it is its own reference and the default for
- * graphs acquired above the current floor; the pre-floor rows stay as
- * historical evidence sources and the retained rc.1 graph stays its own
- * reference, never an alias. */
+ * grants, jobs error codes), so it is its own reference; the 0.2.2-rc.3
+ * graph rewrites the package manifests and changes the
+ * dsh-official-bundles bytes (chat-export session import), so it is its own
+ * reference and the default for graphs acquired above the current floor; the
+ * pre-floor rows stay as historical evidence sources and the retained rc.1
+ * graph stays its own reference, never an alias. */
 function baselineFor(rows: readonly { name?: string; version?: string }[]): ByteAuditManifest {
   // Exact pre-floor graphs retain their own references; no receipt can
   // bypass the separate current floor. Everything else — including future
-  // versions above the floor — starts from the 0.2.2-rc.2 baseline and must
+  // versions above the floor — starts from the 0.2.2-rc.3 baseline and must
   // qualify against it or fail closed on the byte mismatch.
   switch (rows.find((row) => row.name === '@deepseek-ai/dsh')?.version) {
     case '0.2.1-rc.2': return rc2Baseline
     case '0.2.1-rc.3': return rc3Baseline
     case '0.2.1-rc.5': return rc5Baseline
     case '0.2.2-rc.1': return rc022rc1Baseline
-    default: return rc022rc2Baseline
+    case '0.2.2-rc.2': return rc022rc2Baseline
+    default: return rc022rc3Baseline
   }
 }
 /** Every reviewed published state, for equivalence checks: a graph whose lib
  * bytes match ANY audited baseline while carrying another baseline's loading
  * digest is still one reviewed published state, so equivalence is accepted
  * only when loading AND modules come from the SAME reference row. The
- * 0.2.2-rc.1 and 0.2.2-rc.2 states are each byte-distinct from every other
- * audited state. */
-const AUDITED_BASELINES: readonly ByteAuditManifest[] = [rc2Baseline, rc3Baseline, rc5Baseline, rc022rc1Baseline, rc022rc2Baseline]
+ * 0.2.2-rc.1, 0.2.2-rc.2 and 0.2.2-rc.3 states are each byte-distinct from
+ * every other audited state. */
+const AUDITED_BASELINES: readonly ByteAuditManifest[] = [rc2Baseline, rc3Baseline, rc5Baseline, rc022rc1Baseline, rc022rc2Baseline, rc022rc3Baseline]
 
 /** Validate generator-issued operator-owned authority. The descriptor cannot
  * assert compatibility: changed bytes require the independently issued cache
@@ -137,13 +143,58 @@ export function hostTrustDigest(trust: HostRebindTrust): string {
   return createHash('sha256').update(JSON.stringify({ ...trust, packages })).digest('hex')
 }
 
-/** Closed-world regular-file tar projection. Never extract or execute archives. */
+/** One pax extended-header record set: `path` overrides the next member's
+ * stored name, `size` overrides its octal size field. All other record types
+ * (linkpath, checksums, sparse maps, vendor keys) are parsed and ignored —
+ * the member is still validated against the closed-world path rules below. */
+function parsePaxRecords(data: Buffer): { path?: string; size?: number } {
+  const records: { path?: string; size?: number } = {}
+  let offset = 0
+  while (offset + 1 < data.length) {
+    const space = data.indexOf(0x20, offset)
+    if (space < 0) break
+    const lengthText = data.subarray(offset, space).toString('ascii')
+    if (!/^[0-9]+$/.test(lengthText)) break
+    const length = Number.parseInt(lengthText, 10)
+    if (!Number.isSafeInteger(length) || length <= space - offset + 1 || offset + length > data.length) break
+    const record = data.subarray(space + 1, offset + length - 1).toString('utf8')
+    const equals = record.indexOf('=')
+    if (equals > 0) {
+      const key = record.slice(0, equals), value = record.slice(equals + 1)
+      if (key === 'path') records.path = value
+      if (key === 'size') {
+        const size = Number.parseInt(value, 10)
+        if (Number.isSafeInteger(size) && size >= 0) records.size = size
+      }
+    }
+    offset += length
+  }
+  return records
+}
+
+/** Closed-world regular-file tar projection. Never extract or execute archives.
+ *
+ * Accepts every tar encoding the npm registry legitimately publishes for the
+ * acquired graphs: ustar prefix-split long names, pax extended/global header
+ * records (path and size overrides), `.` path segments produced by npm pack,
+ * and a publisher-chosen single root directory (npm's `package/` and
+ * DefinitelyTyped's `<name>/`). The security closure is unchanged: the whole
+ * archive must live under ONE root directory, `..`/absolute/backslash/NUL
+ * paths are refused, normalized member names must be unique, member sizes and
+ * types stay bounded, regular-file members only, and the manifest identity
+ * plus the whole-archive SRI are verified as before. Published-but-nonstandard
+ * encodings (GNU longname links, hardlinks, symlinks, devices) still refuse.
+ * Failures carry a sanitized member-level detail; the caller binds the exact
+ * package identity around it. */
 export function registryArchiveFiles(bytes: Buffer, row: PackageRow): Record<string, Buffer> {
   if (bytes.length === 0 || bytes.length > 64 * 1024 * 1024
     || `sha512-${createHash('sha512').update(bytes).digest('base64')}` !== row.integrity) return fail('host_trust_archive_integrity_mismatch')
   const tar = gunzipSync(bytes, { maxOutputLength: 128 * 1024 * 1024 })
-  const seen = new Set<string>(), files: Record<string, Buffer> = {}
+  const seen = new Set<string>(), seenFiles = new Map<string, Buffer>(), files: Record<string, Buffer> = {}
   let manifest: Record<string, unknown> | undefined
+  let root: string | undefined
+  let globalPax: { path?: string; size?: number } = {}
+  let localPax: { path?: string; size?: number } = {}
   for (let offset = 0; offset + 512 <= tar.length;) {
     const header = tar.subarray(offset, offset + 512)
     if (header.every((byte) => byte === 0)) break
@@ -151,17 +202,71 @@ export function registryArchiveFiles(bytes: Buffer, row: PackageRow): Record<str
     const prefix = header.subarray(345, 500).toString('utf8').replace(/\0.*$/, '')
     const type = header[156]
     const sizeText = header.subarray(124, 136).toString('ascii').replace(/\0.*$/, '').trim()
-    if (!/^[0-7]+$/.test(sizeText) || prefix || !name.startsWith('package/')
-      || name.includes('\\') || name.includes('\0') || name.slice(8).split('/').some((part, index, parts) => part === '..' || part === '.' || (!part && index !== parts.length - 1)) || seen.has(name)) return fail('host_trust_archive_invalid')
-    seen.add(name)
-    const size = Number.parseInt(sizeText, 8), start = offset + 512, end = start + size
-    if (!Number.isSafeInteger(size) || end > tar.length || ![0, 48, 53].includes(type)) return fail('host_trust_archive_invalid')
+    const start = offset + 512
+    const declaredSize = /^[0-7]+$/.test(sizeText) ? Number.parseInt(sizeText, 8) : Number.NaN
+    if (!Number.isSafeInteger(declaredSize) || declaredSize < 0 || start + declaredSize > tar.length) {
+      return fail('host_trust_archive_invalid', `member '${name}' has an out-of-range size field`)
+    }
+    if (type === 120 || type === 103) { // 'x' extended and 'g' global pax headers
+      const records = parsePaxRecords(tar.subarray(start, start + declaredSize))
+      if (type === 103) globalPax = { ...globalPax, ...records }
+      else localPax = records
+      offset = start + Math.ceil(declaredSize / 512) * 512
+      continue
+    }
+    const stored = (globalPax.path ?? localPax.path) ?? (prefix ? `${prefix}/${name}` : name)
+    const size = (globalPax.size ?? localPax.size) ?? declaredSize
+    localPax = {} // A local extended header applies to exactly this member.
+    if (!Number.isSafeInteger(size) || size < 0 || start + size > tar.length) {
+      return fail('host_trust_archive_invalid', `member '${stored}' has an out-of-range size`)
+    }
+    const body = tar.subarray(start, start + size)
+    offset = start + Math.ceil(size / 512) * 512
+    if (stored.startsWith('/') || stored.includes('\\') || stored.includes('\0')) {
+      return fail('host_trust_archive_invalid', `member '${stored}' is not a relative portable path`)
+    }
+    const parts = stored.split('/')
+    const trailingEmpty = parts.length > 1 && parts.at(-1) === ''
+    const normalized: string[] = []
+    for (let index = 0; index < parts.length - (trailingEmpty ? 1 : 0); index += 1) {
+      const part = parts[index]!
+      if (part === '.') continue // npm pack emits ./-aliased segments.
+      if (part === '' || part === '..') {
+        return fail('host_trust_archive_invalid', `member '${stored}' has no portable path under one root`)
+      }
+      normalized.push(part)
+    }
+    if (!normalized.length) {
+      return fail('host_trust_archive_invalid', `member '${stored}' has no portable path under one root`)
+    }
+    const member = normalized.join('/')
+    if (parts[0] !== root) {
+      if (root !== undefined) return fail('host_trust_archive_invalid', `member '${member}' escapes the single root '${root}'`)
+      root = parts[0]
+    }
+    if (member === root) continue // The root directory entry itself.
     if (type === 0 || type === 48) {
-      const file = name.slice(8), content = tar.subarray(start, end)
+      // npm pack can emit the same file twice, once as a `./`-aliased path
+      // and once normalized. That is only accepted when BOTH entries carry
+      // byte-identical content; divergent aliases stay a duplicate refusal.
+      const previous = seenFiles.get(member)
+      if (previous !== undefined) {
+        if (!previous.equals(body)) return fail('host_trust_archive_invalid', `duplicate member '${member}' with divergent content`)
+        continue
+      }
+      seenFiles.set(member, body)
+    } else if (seen.has(member)) {
+      return fail('host_trust_archive_invalid', `duplicate member '${member}'`)
+    }
+    seen.add(member)
+    if (![0, 48, 53].includes(type)) {
+      return fail('host_trust_archive_invalid', `member '${member}' has unsupported typeflag '${String.fromCharCode(type)}'`)
+    }
+    if (type === 0 || type === 48) {
+      const file = member.slice(root.length + 1), content = body
       if (file === 'package.json') manifest = JSON.parse(content.toString('utf8')) as Record<string, unknown>
       if (/\.(?:[cm]?js|json)$/.test(file)) files[file] = Buffer.from(content)
     }
-    offset = start + Math.ceil(size / 512) * 512
   }
   if (manifest?.name !== row.name || manifest.version !== row.version) return fail('host_trust_archive_identity_mismatch')
   return files
@@ -175,7 +280,11 @@ export function registryArchiveModules(bytes: Buffer, row: PackageRow): Record<s
  * The production origin is fixed; tests can inject a fetch transport. */
 export interface HostTrustAcquisitionOptions {
   profileRoot: string
-  dependencyIdentity?: (name: string, importer: string) => PackageRow
+  /** Resolves the exact installed identity of a not-yet-acquired dependency
+   * reached through a consumed adapter's imports. May be async: the Desktop
+   * lane reads the app-graph manifest first and then completes the identity
+   * with the trusted registry integrity for exactly that name@version. */
+  dependencyIdentity?: (name: string, importer: string) => PackageRow | Promise<PackageRow>
 }
 export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typeof fetch = fetch,
   options?: HostTrustAcquisitionOptions): Promise<HostRebindTrust> {
@@ -195,7 +304,17 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
     if (url.origin !== 'https://registry.npmjs.org' || url.username || url.password) return fail('host_trust_source_untrusted')
     const archive = await fetcher(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' })
     if (!archive.ok) return fail('host_trust_registry_unavailable')
-    const files = registryArchiveFiles(Buffer.from(await archive.arrayBuffer()), row)
+    let files: Record<string, Buffer>
+    try {
+      files = registryArchiveFiles(Buffer.from(await archive.arrayBuffer()), row)
+    } catch (error) {
+      if (error instanceof HostTrustError) {
+        // Package-level context around the sanitized member detail; the
+        // acquisition phase (identity/registry/SRI/tar projection) stays visible.
+        throw new HostTrustError(error.code, `package ${row.name}@${row.version}${error.detail ? `: ${error.detail}` : ''}`)
+      }
+      throw error
+    }
     archives.push({ name: row.name, files })
     return { name: row.name, version: row.version, integrity: row.integrity,
       modules: Object.fromEntries(Object.entries(files).map(([file, content]) => [file, createHash('sha256').update(content).digest('hex')])) }
@@ -244,7 +363,7 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
     const manifest = JSON.parse(archive.files['package.json'].toString()) as { dependencies?: Record<string, string>; peerDependencies?: Record<string, string>; peerDependenciesMeta?: Record<string, { optional?: boolean }> }
     for (const dependency of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).filter((dependency) => !manifest.peerDependenciesMeta?.[dependency]?.optional || dependency in (manifest.dependencies ?? {}))) {
       if (!archives.some((a) => a.name === dependency)) {
-        const identity = options.dependencyIdentity?.(dependency, name)
+        const identity = await options.dependencyIdentity?.(dependency, name)
         if (!identity) return fail('host_contract_probe_dependency_unbound')
         dependencies.push(await acquire(identity))
       }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { evaluateHostLock, hostVersionFromPackages } from '../../src/domain/host-lock.js'
 import { combineHostPolicy } from '../../src/domain/host-resolver.js'
 import { RC022_RC2_HOST_PACKAGES } from '../../src/domain/rc022-rc2-host.js'
+import { RC022_RC3_HOST_PACKAGES } from '../../src/domain/rc022-rc3-host.js'
 import { RC021_RC5_HOST_PACKAGES } from '../../src/domain/rc021-rc5-host.js'
 import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 
@@ -39,10 +40,10 @@ describe('the minimum host version is decided by the production host entry', () 
     expect(decision.hostVersion).toMatchObject({ status, minimum: MIN_SUPPORTED_HOST_VERSION, version })
   })
 
-  it.each(['0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0', '0.2.2-rc.1', '0.2.2-alpha.3', '0.2.2-beta.1'])('classifies %s as the retired pre-floor line: below the only supported floor', (version) => {
-    // The whole 0.2.0/0.2.1 line, the retired 0.2.2-rc.1 tuple and the
-    // 0.2.2-rc.0-and-earlier prereleases are below the 0.2.2-rc.2 floor, so
-    // "below the floor" is the correct verdict, not merely "unregistered".
+  it.each(['0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0', '0.2.2-rc.1', '0.2.2-alpha.3', '0.2.2-beta.1', '0.2.2-rc.2'])('classifies %s as the retired pre-floor line: below the only supported floor', (version) => {
+    // The whole 0.2.0/0.2.1 line, the retired 0.2.2-rc.1/0.2.2-rc.2 tuples and
+    // the 0.2.2-rc.0-and-earlier prereleases are below the 0.2.2-rc.3 floor,
+    // so "below the floor" is the correct verdict, not merely "unregistered".
     const decision = combineHostPolicy(evaluateHostLock(withHostVersion(version)))
     expect(decision).toMatchObject({ status: 'unsupported', reasonCode: 'host_lock_version_below_minimum' })
     expect(decision.hostVersion).toMatchObject({ status: 'below_minimum', version })
@@ -59,14 +60,16 @@ describe('the minimum host version is decided by the production host entry', () 
   })
 
   it('accepts the exact audited cohort at the floor', () => {
-    const decision = evaluateHostLock(RC022_RC2_HOST_PACKAGES)
-    expect(hostVersionFromPackages(RC022_RC2_HOST_PACKAGES)).toBe(MIN_SUPPORTED_HOST_VERSION)
+    const decision = evaluateHostLock(RC022_RC3_HOST_PACKAGES)
+    expect(hostVersionFromPackages(RC022_RC3_HOST_PACKAGES)).toBe(MIN_SUPPORTED_HOST_VERSION)
     expect(decision).toMatchObject({ status: 'supported', hostVersion: { status: 'supported' } })
   })
 
-  it('keeps the retired rc.5 cohort refusing at the version gate', () => {
-    // Historical evidence: the formerly audited rc.5 rows now sit below the
-    // raised floor and never re-enter through the graph identity.
+  it('keeps the retired rc.2 and rc.5 cohorts refusing at the version gate', () => {
+    // Historical evidence: the formerly audited 0.2.2-rc.2 and 0.2.1-rc.5 rows
+    // now sit below the raised 0.2.2-rc.3 floor and never re-enter through the
+    // graph identity.
+    expect(evaluateHostLock(RC022_RC2_HOST_PACKAGES).status).toBe('unsupported')
     expect(evaluateHostLock(RC021_RC5_HOST_PACKAGES).status).toBe('unsupported')
   })
 

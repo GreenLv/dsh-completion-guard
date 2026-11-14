@@ -136,9 +136,14 @@ it('qualifies the exact real expanded catalog closure', () => {
   const backend = realpathSync(req.resolve('@deepseek-ai/dsh-session-persistence-jsonl'))
   const shipped = JSON.parse(readFileSync(new URL('../manifests/activation-catalog-cohort.v1.json', import.meta.url), 'utf8')) as { cohorts?: Array<ActivationCatalogReview & { backendVersion: string }> }
   // The shipped manifest carries per-backend-version rows; the qualification
-  // runs against the row of the actually installed backend version.
+  // runs against the row of the actually installed backend version. The
+  // 0.2.2-rc.3 backend keeps the rc.2-reviewed catalog closure byte-identical
+  // (rc.2→rc.3 changes no closure lib bytes or loader shape), so until the
+  // shipped table carries an explicit rc.3 row, the 0.2.2-rc.2 review is the
+  // binding expectation for the installed closure.
   const backendVersion = JSON.parse(readFileSync(join(dirname(dirname(backend)), 'package.json'), 'utf8')).version as string
-  const review = (shipped.cohorts?.find(row => row.backendVersion === backendVersion) ?? shipped) as ActivationCatalogReview
+  const review = (shipped.cohorts?.find(row => row.backendVersion === backendVersion)
+    ?? shipped.cohorts?.find(row => row.backendVersion === '0.2.2-rc.2')) as ActivationCatalogReview
   const result = assertActivationCatalogQualification(backend, review)
   expect(result.packageCount).toBe(23); expect(result.moduleCount).toBe(24)
 })

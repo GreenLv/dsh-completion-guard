@@ -80,6 +80,7 @@ export const families = Object.freeze({
   'host-contract-qualification': [
     'tests/v081-hoisted-host.test.ts',
     'tests/domain/host-contract-probe.test.ts',
+    'tests/domain/host-trust-tar.test.ts',
     'tests/domain/host-node-conditions.test.ts',
     'tests/domain/host-target-preflight.test.ts',
     'tests/domain/host-dependency-audit.review-72d32e7.local.test.ts',
