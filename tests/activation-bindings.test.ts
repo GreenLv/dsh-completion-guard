@@ -149,19 +149,18 @@ describe('legacy migration inventory and receipt', () => {
     expect(prepareActivationMigration(inventory, prior)).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
     expect(prepareActivationMigration(inventory, { ...prior, cohorts: [prior.cohorts[0]] })).toMatchObject({ status: 'ready', receipt: { entries: [{ mode: 'opt-in' }, { mode: 'opt-in' }] } })
     expect(prepareActivationMigration(inventory, { ...prior, cohorts: prior.cohorts.map((c, i) => ({ ...c, sessionIds: [inventory[i].id] })) }).status).toBe('ready')
-    // 0.13.1 accepts 0.0.x-0.12.x predecessors plus the explicitly reviewed
-    // 0.13.0 predecessor; the current (0.13.1) and future lines are never
+    // 0.13.2 accepts 0.0.x-0.12.x predecessors plus the explicitly reviewed
+    // 0.13.0/0.13.1 predecessors; the current (0.13.2) and future lines are never
     // priors — a later release must consciously extend the reviewed set.
     expect(prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.10.0' } })).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
     expect(prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.11.0' } })).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
     expect(prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.11.2-beta.1' } })).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
-    for (const version of ['0.12.0', '0.12.1', '0.12.2-beta.1', '0.13.0', '0.13.0-rc.1']) {
+    for (const version of ['0.12.0', '0.12.1', '0.12.2-beta.1', '0.13.0', '0.13.0-rc.1', '0.13.1', '0.13.1-rc.1']) {
       const input = { ...prior, previousPackage: { ...prior.previousPackage, version } }
       expect(prepareActivationMigration(inventory, input)).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
       expect(prepareActivationMigration(inventory, { ...input, cohorts: [prior.cohorts[0]] })).toMatchObject({ status: 'ready', receipt: { entries: [{ mode: 'opt-in' }, { mode: 'opt-in' }] } })
     }
-    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.1' } })).toThrow('activation_prior_modes_invalid')
-    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.1-rc.1' } })).toThrow('activation_prior_modes_invalid')
+    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.2-rc.1' } })).toThrow('activation_prior_modes_invalid')
     expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.2' } })).toThrow('activation_prior_modes_invalid')
     expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '1.0.0' } })).toThrow('activation_prior_modes_invalid')
   })

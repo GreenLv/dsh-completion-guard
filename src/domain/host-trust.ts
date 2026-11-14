@@ -143,131 +143,131 @@ export function hostTrustDigest(trust: HostRebindTrust): string {
   return createHash('sha256').update(JSON.stringify({ ...trust, packages })).digest('hex')
 }
 
-/** One pax extended-header record set: `path` overrides the next member's
- * stored name, `size` overrides its octal size field. All other record types
- * (linkpath, checksums, sparse maps, vendor keys) are parsed and ignored —
- * the member is still validated against the closed-world path rules below. */
-function parsePaxRecords(data: Buffer): { path?: string; size?: number } {
-  const records: { path?: string; size?: number } = {}
-  let offset = 0
-  while (offset + 1 < data.length) {
+interface PaxRecords { path?: string; size?: number; nodeType?: string }
+const paxMetadataKeys = new Set(['mtime', 'atime', 'ctime', 'uid', 'gid', 'uname', 'gname', 'comment', 'SCHILY.dev', 'SCHILY.ino', 'SCHILY.nlink', 'LIBARCHIVE.creationtime'])
+function archiveText(bytes: Buffer): string {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes) }
+  catch { return fail('host_trust_archive_invalid', 'archive contains invalid UTF-8') }
+}
+/** Parse the entire length-delimited PAX body. Unsupported semantic keys and
+ * ambiguous/malformed records never fall back to the stored tar header. */
+function parsePaxRecords(data: Buffer): PaxRecords {
+  const records: PaxRecords = {}, seen = new Set<string>()
+  for (let offset = 0; offset < data.length;) {
     const space = data.indexOf(0x20, offset)
-    if (space < 0) break
-    const lengthText = data.subarray(offset, space).toString('ascii')
-    if (!/^[0-9]+$/.test(lengthText)) break
-    const length = Number.parseInt(lengthText, 10)
-    if (!Number.isSafeInteger(length) || length <= space - offset + 1 || offset + length > data.length) break
-    const record = data.subarray(space + 1, offset + length - 1).toString('utf8')
-    const equals = record.indexOf('=')
-    if (equals > 0) {
-      const key = record.slice(0, equals), value = record.slice(equals + 1)
-      if (key === 'path') records.path = value
-      if (key === 'size') {
-        const size = Number.parseInt(value, 10)
-        if (Number.isSafeInteger(size) && size >= 0) records.size = size
-      }
+    const lengthText = space < 0 ? '' : data.subarray(offset, space).toString('ascii')
+    if (!/^[1-9][0-9]*$/.test(lengthText)) return fail('host_trust_archive_invalid', 'invalid PAX record length')
+    const length = Number(lengthText), end = offset + length
+    if (!Number.isSafeInteger(length) || length <= space - offset + 3 || end > data.length || data[end - 1] !== 0x0a) {
+      return fail('host_trust_archive_invalid', 'incomplete PAX record')
     }
-    offset += length
+    const record = archiveText(data.subarray(space + 1, end - 1)), equals = record.indexOf('=')
+    const key = record.slice(0, equals), value = record.slice(equals + 1)
+    if (equals < 1 || !/^[A-Za-z0-9_.-]+$/.test(key) || seen.has(key) || value.includes('\0')) {
+      return fail('host_trust_archive_invalid', 'invalid or duplicate PAX key')
+    }
+    seen.add(key)
+    if (key === 'path') {
+      if (!value) return fail('host_trust_archive_invalid', 'empty PAX path')
+      records.path = value
+    } else if (key === 'size') {
+      if (!/^(?:0|[1-9][0-9]*)$/.test(value) || !Number.isSafeInteger(Number(value))) return fail('host_trust_archive_invalid', 'invalid PAX size')
+      records.size = Number(value)
+    } else if (key === 'NODETAR.type') {
+      // This legacy npm metadata describes the same member; it must not
+      // silently reinterpret a directory or link as a regular file.
+      if (value !== 'File') return fail('host_trust_archive_invalid', 'unsupported NODETAR member type')
+      records.nodeType = value
+    } else if (key === 'NODETAR.follow') {
+      if (value !== 'false') return fail('host_trust_archive_invalid', 'unsupported NODETAR follow')
+    } else if (key === 'SCHILY.nlink') {
+      if (value !== '1') return fail('host_trust_archive_invalid', 'unsupported PAX link count')
+    } else if (/^NODETAR\.(?:depth|blksize|blocks)$/u.test(key)) {
+      if (!/^(?:0|[1-9][0-9]*)$/u.test(value)) return fail('host_trust_archive_invalid', 'invalid NODETAR numeric metadata')
+    } else if (/^NODETAR\.ignoreFiles\.[0-9]+$/u.test(key) || /^NODETAR\.package\.[A-Za-z0-9_.-]+$/u.test(key)) {
+      // Archive producer metadata; none of these fields changes tar semantics.
+    } else if (!paxMetadataKeys.has(key)) {
+      return fail('host_trust_archive_invalid', 'unsupported PAX semantic key')
+    }
+    offset = end
   }
   return records
 }
 
-/** Closed-world regular-file tar projection. Never extract or execute archives.
- *
- * Accepts every tar encoding the npm registry legitimately publishes for the
- * acquired graphs: ustar prefix-split long names, pax extended/global header
- * records (path and size overrides), `.` path segments produced by npm pack,
- * and a publisher-chosen single root directory (npm's `package/` and
- * DefinitelyTyped's `<name>/`). The security closure is unchanged: the whole
- * archive must live under ONE root directory, `..`/absolute/backslash/NUL
- * paths are refused, normalized member names must be unique, member sizes and
- * types stay bounded, regular-file members only, and the manifest identity
- * plus the whole-archive SRI are verified as before. Published-but-nonstandard
- * encodings (GNU longname links, hardlinks, symlinks, devices) still refuse.
- * Failures carry a sanitized member-level detail; the caller binds the exact
- * package identity around it. */
+/** Project regular JS/JSON files without extracting or executing the archive.
+ * Supports ustar prefixes, PAX path/size, dot aliases and one publisher root.
+ * Local PAX overrides global state; only an identical file at a DISTINCT dot
+ * alias can repeat. Roots, directories and exact paths never bypass type or
+ * duplicate checks. Unsupported extensions fail closed. */
 export function registryArchiveFiles(bytes: Buffer, row: PackageRow): Record<string, Buffer> {
   if (bytes.length === 0 || bytes.length > 64 * 1024 * 1024
     || `sha512-${createHash('sha512').update(bytes).digest('base64')}` !== row.integrity) return fail('host_trust_archive_integrity_mismatch')
   const tar = gunzipSync(bytes, { maxOutputLength: 128 * 1024 * 1024 })
-  const seen = new Set<string>(), seenFiles = new Map<string, Buffer>(), files: Record<string, Buffer> = {}
-  let manifest: Record<string, unknown> | undefined
-  let root: string | undefined
-  let globalPax: { path?: string; size?: number } = {}
-  let localPax: { path?: string; size?: number } = {}
+  const entries = new Map<string, { type: number; body: Buffer; paths: Set<string> }>(), parents = new Set<string>(), files: Record<string, Buffer> = {}
+  let manifest: Record<string, unknown> | undefined, root: string | undefined
+  let globalPax: PaxRecords = {}, localPax: PaxRecords | undefined, terminated = false
   for (let offset = 0; offset + 512 <= tar.length;) {
     const header = tar.subarray(offset, offset + 512)
-    if (header.every((byte) => byte === 0)) break
-    const name = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '')
-    const prefix = header.subarray(345, 500).toString('utf8').replace(/\0.*$/, '')
-    const type = header[156]
-    const sizeText = header.subarray(124, 136).toString('ascii').replace(/\0.*$/, '').trim()
-    const start = offset + 512
-    const declaredSize = /^[0-7]+$/.test(sizeText) ? Number.parseInt(sizeText, 8) : Number.NaN
-    if (!Number.isSafeInteger(declaredSize) || declaredSize < 0 || start + declaredSize > tar.length) {
-      return fail('host_trust_archive_invalid', `member '${name}' has an out-of-range size field`)
+    if (header.every(byte => byte === 0)) {
+      if (tar.subarray(offset).some(byte => byte !== 0)) return fail('host_trust_archive_invalid', 'data after archive terminator')
+      terminated = true
+      break
     }
-    if (type === 120 || type === 103) { // 'x' extended and 'g' global pax headers
+    const field = (start: number, end: number): string => {
+      const bytes = header.subarray(start, end), nul = bytes.indexOf(0)
+      return archiveText(nul < 0 ? bytes : bytes.subarray(0, nul))
+    }
+    const name = field(0, 100), prefix = field(345, 500), type = header[156]
+    const sizeText = field(124, 136).trim(), start = offset + 512
+    const declaredSize = /^[0-7]+$/.test(sizeText) ? Number.parseInt(sizeText, 8) : Number.NaN
+    if (!Number.isSafeInteger(declaredSize) || declaredSize < 0 || start + declaredSize > tar.length) return fail('host_trust_archive_invalid', 'out-of-range tar size field')
+    if (type === 120 || type === 103) {
+      if (localPax !== undefined) return fail('host_trust_archive_invalid', 'unconsumed local PAX header')
       const records = parsePaxRecords(tar.subarray(start, start + declaredSize))
       if (type === 103) globalPax = { ...globalPax, ...records }
       else localPax = records
       offset = start + Math.ceil(declaredSize / 512) * 512
       continue
     }
-    const stored = (globalPax.path ?? localPax.path) ?? (prefix ? `${prefix}/${name}` : name)
-    const size = (globalPax.size ?? localPax.size) ?? declaredSize
-    localPax = {} // A local extended header applies to exactly this member.
-    if (!Number.isSafeInteger(size) || size < 0 || start + size > tar.length) {
-      return fail('host_trust_archive_invalid', `member '${stored}' has an out-of-range size`)
-    }
+    const stored = localPax?.path ?? globalPax.path ?? (prefix ? `${prefix}/${name}` : name)
+    const size = localPax?.size ?? globalPax.size ?? declaredSize
+    const nodeType = localPax?.nodeType ?? globalPax.nodeType
+    localPax = undefined
+    if (nodeType && type !== 0 && type !== 48) return fail('host_trust_archive_invalid', 'NODETAR type conflicts with tar member')
+    if (!Number.isSafeInteger(size) || size < 0 || start + Math.ceil(size / 512) * 512 > tar.length) return fail('host_trust_archive_invalid', 'out-of-range tar member size')
     const body = tar.subarray(start, start + size)
     offset = start + Math.ceil(size / 512) * 512
-    if (stored.startsWith('/') || stored.includes('\\') || stored.includes('\0')) {
-      return fail('host_trust_archive_invalid', `member '${stored}' is not a relative portable path`)
-    }
-    const parts = stored.split('/')
-    const trailingEmpty = parts.length > 1 && parts.at(-1) === ''
-    const normalized: string[] = []
-    for (let index = 0; index < parts.length - (trailingEmpty ? 1 : 0); index += 1) {
-      const part = parts[index]!
-      if (part === '.') continue // npm pack emits ./-aliased segments.
-      if (part === '' || part === '..') {
-        return fail('host_trust_archive_invalid', `member '${stored}' has no portable path under one root`)
-      }
-      normalized.push(part)
-    }
-    if (!normalized.length) {
-      return fail('host_trust_archive_invalid', `member '${stored}' has no portable path under one root`)
-    }
+    if (![0, 48, 53].includes(type) || (type === 53 && size !== 0)) return fail('host_trust_archive_invalid', `member '${stored}' has unsupported type or directory content`)
+    if (stored.startsWith('/') || stored.includes('\\') || /[\u0000-\u001f\u007f]/u.test(stored)) return fail('host_trust_archive_invalid', `member '${stored}' is not a relative portable path`)
+    const parts = stored.split('/'), trailingSlash = parts.at(-1) === ''
+    if (trailingSlash) parts.pop()
+    if (parts.some(part => part === '' || part === '..')) return fail('host_trust_archive_invalid', `member '${stored}' has no portable path under one root`)
+    const normalized = parts.filter(part => part !== '.')
+    if (!normalized.length) return fail('host_trust_archive_invalid', 'empty normalized member path')
     const member = normalized.join('/')
-    if (parts[0] !== root) {
-      if (root !== undefined) return fail('host_trust_archive_invalid', `member '${member}' escapes the single root '${root}'`)
-      root = parts[0]
+    root ??= normalized[0]
+    if (normalized[0] !== root) return fail('host_trust_archive_invalid', `member '${member}' escapes the single root`)
+    if ((member === root && type !== 53) || (trailingSlash && type !== 53)) return fail('host_trust_archive_invalid', `member '${member}' is not a directory`)
+    if (type !== 53 && parents.has(member)) return fail('host_trust_archive_invalid', `member '${member}' conflicts with a directory`)
+    for (let i = 1; i < normalized.length; i++) {
+      const parent = normalized.slice(0, i).join('/')
+      const entry = entries.get(parent)
+      if (entry && entry.type !== 53) return fail('host_trust_archive_invalid', `member '${member}' conflicts with a file ancestor`)
+      parents.add(parent)
     }
-    if (member === root) continue // The root directory entry itself.
-    if (type === 0 || type === 48) {
-      // npm pack can emit the same file twice, once as a `./`-aliased path
-      // and once normalized. That is only accepted when BOTH entries carry
-      // byte-identical content; divergent aliases stay a duplicate refusal.
-      const previous = seenFiles.get(member)
-      if (previous !== undefined) {
-        if (!previous.equals(body)) return fail('host_trust_archive_invalid', `duplicate member '${member}' with divergent content`)
-        continue
-      }
-      seenFiles.set(member, body)
-    } else if (seen.has(member)) {
-      return fail('host_trust_archive_invalid', `duplicate member '${member}'`)
+    const previous = entries.get(member)
+    if (previous) {
+      if (type === 53 || previous.type === 53 || previous.paths.has(stored) || !previous.body.equals(body)) return fail('host_trust_archive_invalid', `duplicate member '${member}'`)
+      previous.paths.add(stored)
+      continue
     }
-    seen.add(member)
-    if (![0, 48, 53].includes(type)) {
-      return fail('host_trust_archive_invalid', `member '${member}' has unsupported typeflag '${String.fromCharCode(type)}'`)
-    }
-    if (type === 0 || type === 48) {
-      const file = member.slice(root.length + 1), content = body
-      if (file === 'package.json') manifest = JSON.parse(content.toString('utf8')) as Record<string, unknown>
-      if (/\.(?:[cm]?js|json)$/.test(file)) files[file] = Buffer.from(content)
-    }
+    entries.set(member, { type, body, paths: new Set([stored]) })
+    if (type === 53) continue
+    const file = member.slice(root.length + 1)
+    if (file === 'package.json') manifest = JSON.parse(archiveText(body)) as Record<string, unknown>
+    if (/\.(?:[cm]?js|json)$/.test(file)) files[file] = Buffer.from(body)
   }
+  if (!terminated || localPax !== undefined) return fail('host_trust_archive_invalid', 'incomplete archive or PAX state')
   if (manifest?.name !== row.name || manifest.version !== row.version) return fail('host_trust_archive_identity_mismatch')
   return files
 }

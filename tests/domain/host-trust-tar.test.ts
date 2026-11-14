@@ -96,6 +96,23 @@ function fixChecksum(block: Buffer): void {
   block.write(octal(sum, 8), 148, 8, 'ascii')
 }
 
+function paxHeader(kind: 'x' | 'g', records: Record<string, string> | Buffer): Buffer {
+  const body = Buffer.isBuffer(records) ? records : Buffer.from(Object.entries(records).map(([key, value]) => {
+    const text = `${key}=${value}\n`
+    let length = Buffer.byteLength(text) + 2
+    while (Buffer.byteLength(`${length} ${text}`) !== length) length = Buffer.byteLength(`${length} ${text}`)
+    return `${length} ${text}`
+  }).join(''))
+  const block = Buffer.alloc(512)
+  block.write('PaxHeader/test'); block[156] = kind.charCodeAt(0)
+  block.write(octal(body.length, 12), 124, 12, 'ascii'); fixChecksum(block)
+  return Buffer.concat([block, ...padBody(body)])
+}
+
+function segments(...parts: Buffer[]): Buffer {
+  return Buffer.concat([...parts.map(part => part.subarray(0, part.length - 1024)), Buffer.alloc(1024)])
+}
+
 function gzip(tarball: Buffer, rowIdentity: PackageRow): Buffer {
   const bytes = gzipSync(tarball)
   rowIdentity.integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`
@@ -128,7 +145,6 @@ describe('registry archive projection accepts every published tar encoding', () 
   it('applies pax path and size records (npm long-path encoding)', () => {
     const bytes = gzip(tar([
       { name: 'PaxHeader/package/package.json', pax: { path: 'package/package.json' }, content: manifest },
-      { name: 'package/package.json', content: manifest },
     ]), fixture)
     const files = registryArchiveFiles(bytes, fixture)
     expect(Object.keys(files)).toEqual(['package.json'])
@@ -285,5 +301,73 @@ describe('registry archive projection keeps the security closure closed', () => 
       const detail = (error as HostTrustError).detail
       expect(detail).toContain('escape.json')
     }
+  })
+})
+
+describe('registry archive PAX and normalized-entry closure', () => {
+  const row = () => makeRow('@deepseek-ai/dsh-fixture')
+  const member = (name: string, content: Buffer, typeflag?: number) => tar([{ name, content, typeflag }])
+  const ext = (kind: 'x' | 'g', value: Record<string, string> | Buffer) => Buffer.concat([paxHeader(kind, value), Buffer.alloc(1024)])
+  const check = (parts: Buffer[], accepted: boolean) => {
+    const identity = row(), bytes = gzip(segments(...parts), identity)
+    if (accepted) return registryArchiveFiles(bytes, identity)
+    expect(() => registryArchiveFiles(bytes, identity)).toThrow(HostTrustError)
+    return undefined
+  }
+  const main = () => member('package/package.json', manifest)
+
+  it('uses local PAX path and size ahead of global values', () => {
+    const escaping = [ext('g', { path: 'package/package.json' }), ext('x', { path: 'package/package.json' }), main(),
+      ext('x', { path: '../outside.js' }), main()]
+    check(escaping, false)
+    const projected = check([main(), ext('g', { size: '3' }), ext('x', { size: '2' }), member('package/x.json', Buffer.from('{}'))], true)
+    expect(projected?.['x.json']).toEqual(Buffer.from('{}'))
+  })
+
+  it.each([
+    Buffer.from('999 path=../escape.js\n'),
+    Buffer.from('18 path=package/x'),
+    Buffer.from('14 size=2junk\n'),
+    paxHeader('x', { path: '../outside.js' }).subarray(512, 512 + 2),
+  ])('rejects malformed PAX bodies without silently using stored paths', body => {
+    check([main(), ext('x', body), member('package/lib/x.js', Buffer.from('x'))], false)
+  })
+
+  it.each<Record<string, string>>([{ 'GNU.sparse.map': '0,1' }, { linkpath: '../escape' }, { 'NODETAR.type': 'SymbolicLink' }, { 'NODETAR.follow': 'true' }, { 'SCHILY.nlink': '2' }])
+  ('rejects PAX fields that change member semantics: %j', records => {
+    check([main(), ext('x', records), member('package/lib/x.js', Buffer.from('x'))], false)
+  })
+
+  it('accepts observed NODETAR metadata without treating it as file content or identity', () => {
+    const fields = { 'NODETAR.type': 'File', 'NODETAR.follow': 'false', 'NODETAR.depth': '1', 'NODETAR.blksize': '4096', 'NODETAR.blocks': '8', 'NODETAR.ignoreFiles.0': '.npmignore', 'NODETAR.package.name': 'example', 'SCHILY.dev': '1', 'SCHILY.ino': '2', 'SCHILY.nlink': '1', uid: '1', gid: '1' }
+    expect(check([main(), ext('x', fields), member('package/lib/x.js', Buffer.from('x'))], true)?.['lib/x.js'].toString()).toBe('x')
+  })
+
+  it('refuses pending and repeated PAX records', () => {
+    check([main(), ext('x', { path: 'package/x.js' })], false)
+    const single = paxHeader('x', { path: 'package/x.js' })
+    const count = Number.parseInt(single.subarray(124, 136).toString('ascii'), 8)
+    const body = single.subarray(512, 512 + count)
+    check([main(), ext('x', Buffer.concat([body, body])), member('package/x.js', Buffer.from('x'))], false)
+  })
+
+  it('checks root type, root duplication, and file/directory collisions in both orders', () => {
+    for (const type of [0x30, 0x31, 0x32]) check([member('package', Buffer.alloc(0), type), main()], false)
+    const directory = member('package/', Buffer.alloc(0), 0x35)
+    check([directory, directory, main()], false)
+    const file = member('package/lib/x.js', Buffer.from('x')), dir = member('package/lib/x.js', Buffer.alloc(0), 0x35)
+    check([main(), dir, file], false); check([main(), file, dir], false)
+    const child = member('package/lib/x.js/child.js', Buffer.from('x'))
+    check([main(), file, child], false); check([main(), child, file], false)
+  })
+
+  it('rejects identical raw repeats while accepting identical dot aliases', () => {
+    const file = member('package/lib/x.js', Buffer.from('x'))
+    check([main(), file, file], false)
+    expect(check([main(), file, member('package/./lib/x.js', Buffer.from('x'))], true)?.['lib/x.js'].toString()).toBe('x')
+  })
+
+  it('accepts a normalized leading dot root', () => {
+    expect(check([member('./package/package.json', manifest), member('./package/lib/x.js', Buffer.from('x'))], true)?.['lib/x.js'].toString()).toBe('x')
   })
 })

@@ -27,6 +27,7 @@ function fixture() {
     export const inspectDesktopTargetGraph = (_, profile) => refused(hasDesktopImporterState(profile)
       ? 'target_profile_unmanaged_modules' : 'test_pre_install_selected');
     export const injectActiveProfileHostLock = () => refused('unexpected_inject');
+    export const inspectProfileHostLockPatch = () => ({ managed: false, unmanagedEntries: 0 });
     export const prepareActiveHostTrust = () => refused('unexpected_network');
     export const prepareTargetHostTrust = prepareActiveHostTrust;
     export const prepareDesktopHostTrust = prepareActiveHostTrust;

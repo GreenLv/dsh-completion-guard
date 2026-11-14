@@ -1331,13 +1331,11 @@ function managedPatchEntry(input: ActiveProfileHostLock, activation?: PatchActiv
   } }
 }
 
-/** Atomically inject a repeatable managed patch into the selected profile only. */
-export function injectActiveProfileHostLock(input: ActiveProfileHostLock): string {
-  if (input.evaluation.status !== 'supported') throw new HostProfileError('profile_host_lock_unsupported',
-    'an unsupported host cannot replace the managed lock')
-  const patchPath = join(input.profileRoot, 'cordis.patch.yml')
+/** Validate the same managed boundary before either install or injection. */
+function inspectPatchBoundary(profileRoot: string) {
+  const patchPath = join(profileRoot, 'cordis.patch.yml')
   const original = existsSync(patchPath) ? readFileSync(patchPath, 'utf8') : ''
-  parseProfilePatch(original)
+  const allRows = parseProfilePatch(original)
   const stripped = stripManagedPatch(original)
   const base = normalizeEmptyPatchBase(stripped.base)
   const rows = parseProfilePatch(base)
@@ -1349,9 +1347,25 @@ export function injectActiveProfileHostLock(input: ActiveProfileHostLock): strin
     const config = prior[0]?.config as Record<string, unknown> | undefined
     if (prior.length !== 1 || prior[0].id !== 'context-guard' || prior[0].name !== 'dsh-completion-guard' ||
       !config || config.hostLockPolicy !== 'dsh-core/v1' || !Array.isArray(config.hostLockPackages)) patchFormatError()
+    if (!isDeepStrictEqual(allRows, [...rows, ...prior])) patchFormatError()
     priorActivation = activationFromEntries(prior, true)
   }
   const activation = activationFromEntries(rows) ?? priorActivation
+  return { patchPath, base, rows, flow, activation, managed: Boolean(stripped.prior) }
+}
+
+/** Read-only pre-install boundary check, independent of host/network state. */
+export function inspectProfileHostLockPatch(profileRoot: string): { managed: boolean; unmanagedEntries: number } {
+  if (!statSync(realpathSync(profileRoot)).isDirectory()) throw new HostProfileError('profile_root_invalid', 'profile root must be an existing directory')
+  const result = inspectPatchBoundary(profileRoot)
+  return { managed: result.managed, unmanagedEntries: result.rows.length }
+}
+
+/** Atomically inject a repeatable managed patch into the selected profile only. */
+export function injectActiveProfileHostLock(input: ActiveProfileHostLock): string {
+  if (input.evaluation.status !== 'supported') throw new HostProfileError('profile_host_lock_unsupported',
+    'an unsupported host cannot replace the managed lock')
+  const { patchPath, base, rows, flow, activation } = inspectPatchBoundary(input.profileRoot)
   const entry = managedPatchEntry(input, activation)
   let next: string
   if (flow) {

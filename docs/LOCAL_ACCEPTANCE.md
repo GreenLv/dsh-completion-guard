@@ -1,6 +1,17 @@
 # Acceptance contracts and records
 
-The first section defines the checks for the 0.13.1 host update. Later sections describe older versions and their evidence. Use the instructions and results for the exact source and package under review.
+The first section defines the checks for the 0.13.2 host update. Later sections describe older versions and their evidence. Use the instructions and results for the exact source and package under review.
+
+
+## 0.13.2 / DSH 0.2.2-rc.3 candidate contract
+
+The minimum host is DSH `0.2.2-rc.3`; rc.2 is an upgrade source and a refusal control. Bind candidate CI to the exact source commit and run the required macOS arm64 and Windows x64 Web, Headless and official Desktop acceptance on the same frozen package. Verify the 0.13.1 to 0.13.2 predecessor lifecycle and rc.2 to rc.3 transition with the preserved predecessor fixture, including both compression modes and refusal controls. Portable tests and source qualification do not prove native loading or artifact acceptance.
+
+最低宿主为 DSH `0.2.2-rc.3`；rc.2 是升级来源及拒绝控制。候选 CI 须绑定精确源码提交；macOS arm64 与 Windows x64 的 Web、Headless 和官方 Desktop 原生验收须使用同一冻结包。使用保留的前驱夹具核验 0.13.1 到 0.13.2 的生命周期与 rc.2 到 rc.3 宿主迁移，包括两种压缩格式及拒绝控制。便携测试和源码资格不代表原生加载或制品通过。
+
+On 2026-11-15 the maintainer extended only the existing three Undici 8.11.2 exceptions (1243472, 1243474, 1243477) to 0.13.2, through 2026-11-30 inclusive. The signed host remains affected. The same decision retains archive-045 as unverified for 0.13.2 without blocking this release; it is not counted as a pass. Other findings and gates are unchanged.
+
+维护者于 2026-11-15 仅将既有三项 Undici 8.11.2 例外（1243472、1243474、1243477）扩展至 0.13.2，期限截至 2026-11-30（含）；签名宿主仍受影响。同次决定允许本版保留 archive-045 为未验证而不阻断发布，不计为通过；其他发现和门槛不变。
 
 ## 0.13.1 / DSH 0.2.2-rc.2 candidate contract
 

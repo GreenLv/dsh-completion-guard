@@ -43,7 +43,7 @@ import {
 } from '../src/domain/host-desktop.js'
 import { createHostAuditSession } from '../src/domain/host-audit-session.js'
 import { desktopDependencyGraph } from '../src/domain/host-desktop-graph.js'
-import { hasDesktopDistributionHeader } from '../src/domain/host-desktop-distribution.js'
+import { desktopDistributionSupplement, hasDesktopDistributionHeader } from '../src/domain/host-desktop-distribution.js'
 import { evaluateConfiguredHostLock, injectActiveProfileHostLock, inspectDesktopTargetGraph, resolveActiveProfileHostLock, revalidateDesktopCoreLock, verifyComposedHostLockDump } from '../src/domain/host-resolver.js'
 import { evaluateHostCapability, evaluateHostLock, type HostProfileKind } from '../src/domain/host-lock.js'
 import { resolveConfig } from '../src/config.js'
@@ -380,14 +380,13 @@ describe('0.2.2-rc.3 desktop distribution registration', () => {
     expect(hasDesktopDistributionHeader('a7765c467a2e0a9c047609bd6522db22f20abe82c970075aaed71fd381e15406', 'darwin')).toBe(true)
   })
 
-  it('leaves the win32 rc.3 carrier unqualified until its distribution row is registered', () => {
-    // Known 0.13.2 gap, expected state rather than a defect: the Windows x64
-    // rc.3 row is pending the Windows identity owner's acquisition of the
-    // official installer, so the rc.3 header must not qualify any win32
-    // carrier and no second row may claim the same release on that platform.
-    expect(distributionPins.distributions.some(row => row.platform === 'win32' && row.version === RC_VERSION)).toBe(false)
-    expect(hasDesktopDistributionHeader('a7765c467a2e0a9c047609bd6522db22f20abe82c970075aaed71fd381e15406', 'win32')).toBe(false)
-    expect(hasDesktopDistributionHeader('a'.repeat(64), 'win32')).toBe(false)
+  it('binds the independently acquired win32 rc.3 tuple and rejects altered fields', () => {
+    const observed = { headerSha256: 'd814508655669477e6c435091f4104d62c7b9a1461bba4c4d1e59a08cc77cb5b', platform: 'win32', arch: 'x64', hostVersion: RC_VERSION, runtimeVersion: RC_VERSION, desktopVersion: RC_VERSION, pnpmVersion: '11.28.5', desktopManifestSha256: '09a24f154710583949e37c38ed6ae6509340538133bab8320ea5dbff424dceaf', manifest: { name: '@deepseek-ai/dsh-desktop', version: RC_VERSION, dshBuildCommit: '6b729fedde0c8fd03af7afdf5a711aa64fe87c3b', dshBuildDirty: false } }
+    expect(hasDesktopDistributionHeader(observed.headerSha256, 'win32')).toBe(true)
+    expect(desktopDistributionSupplement(observed)?.files).toEqual([])
+    for (const changed of [{ arch: 'arm64' }, { platform: 'darwin' }, { hostVersion: '0.2.2-rc.2' }, { headerSha256: '0'.repeat(64) }, { manifest: { ...observed.manifest, dshBuildDirty: true } }]) {
+      expect(desktopDistributionSupplement({ ...observed, ...changed })).toBeUndefined()
+    }
   })
 })
 

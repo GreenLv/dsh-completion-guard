@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 const roots: string[] = []
 // These functional cases start multiple real Node carriers and deliberately
@@ -25,11 +25,12 @@ function fixture() {
     const evaluate=()=>({status:process.env.CONTROL_STATUS??'supported',platform:'posix',profileKind:process.env.CONTROL_PROFILE??'web',capabilities:{},packages});
     export const evaluateConfiguredHostLock=evaluate;
     export const hasDesktopImporterState=()=>false;
+    export const inspectProfileHostLockPatch=()=>({managed:false,unmanagedEntries:0});
     const target=()=>({packages,profileGraph:{state:'controlled'},runtime:{asarRealpath:'fixture',metadata:{},hostVersion:{version:'0.2.1-rc.3'}}});
     export const inspectDesktopTargetGraph=target;export const inspectTargetHostGraph=target;
     export const resolveActiveProfileHostLock=()=>{appendFileSync(process.env.CONTROL_ACTIVE,'active');return {runtimeRoot:${JSON.stringify(archive)},profileRoot:${JSON.stringify(profile)},profileKind:process.env.CONTROL_PROFILE??'web',evaluation:evaluate()}};
     export const injectActiveProfileHostLock=()=>{throw Object.assign(Error('unexpected mutation'),{code:'unexpected_mutation'})};
-    export const prepareActiveHostTrust=()=>{throw Error('unexpected network')};export const prepareTargetHostTrust=prepareActiveHostTrust;export const prepareDesktopHostTrust=prepareActiveHostTrust;
+    export const prepareActiveHostTrust=()=>{throw Object.assign(Error('controlled'),{code:'host_trust_archive_invalid',detail:process.env.CONTROL_DETAIL})};export const prepareTargetHostTrust=prepareActiveHostTrust;export const prepareDesktopHostTrust=prepareActiveHostTrust;
     export const verifyComposedHostLockDump=()=>{};
   `)
   const run = async (command: string, profileKind = 'web', status = 'supported', closed = false) => {
@@ -84,4 +85,13 @@ it('labels verify-dump as lock-field readback rather than full configuration val
   const result = await f.run('verify-dump')
   expect(result.code).toBe(0)
   expect(JSON.parse(result.bytes.toString('utf8'))).toMatchObject({ verification_scope: 'guard_host_lock_fields', configuration_syntax: 'not_checked' })
+})
+it('emits only bounded registry package and safe member identifiers on failure', () => {
+  const f = fixture()
+  const run = (detail: string) => spawnSync(process.execPath, [f.cli, 'inspect', '--profile', 'web', '--runtime-root', f.archive, '--profile-root', f.profile, '--rebind-registry'], { encoding: 'utf8', env: { ...process.env, CONTROL_DETAIL: detail } })
+  const good = run("package demo@1.0.0: member 'package/lib/x.js' has unsupported type")
+  expect(good.status).toBe(1); expect(JSON.parse(good.stderr).detail).toEqual({ package: 'demo@1.0.0', member: 'package/lib/x.js' })
+  const unsafe = run("package demo@1.0.0: member '../private/secret' has unsupported type")
+  expect(unsafe.status).toBe(1); expect(JSON.parse(unsafe.stderr).detail).toEqual({ package: 'demo@1.0.0' })
+  expect(unsafe.stderr).not.toContain('private')
 })

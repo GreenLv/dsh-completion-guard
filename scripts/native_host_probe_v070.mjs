@@ -13,7 +13,7 @@ import { runGitIncident, runFollowupIncident, assertIncidentSummary, createGitFi
 export const name = 'completion-guard-native-probe-v070'
 export const inject = ['agents', 'sessions', 'sessionPersistence', 'appReady', 'commands']
 const DRIVER_FILES = ['native_host_probe.mjs', 'native_host_probe_v070.mjs', 'native_release_fixture_v070.mjs', 'native_incident_fixture_v070.mjs',
-  'native_upgrade_fixture_v131.mjs', '../tests/fixtures/upgrade/legacy-0.13.0-activation.json']
+  'native_upgrade_fixture_v131.mjs', '../tests/fixtures/upgrade/legacy-0.13.0-activation.json', '../tests/fixtures/upgrade/legacy-0.13.1-activation.json']
 export function driverDigest() {
   const digest = createHash('sha256').update('dsh.native-probe.v070\n')
   for (const name of DRIVER_FILES) digest.update(name).update('\0')
@@ -541,8 +541,10 @@ export function apply(ctx, config) {
         })
         await check('v131_predecessor_activation_restore', async () => {
           const { runPredecessorActivationFixture } = await import('./native_upgrade_fixture_v131.mjs')
-          return runPredecessorActivationFixture({ ctx, config, domain, SessionId, createUserMessage, createProbeAgent,
+          await runPredecessorActivationFixture({ ctx, config, domain, SessionId, createUserMessage, createProbeAgent,
             timed: progress.timed })
+          return runPredecessorActivationFixture({ ctx, config, domain, SessionId, createUserMessage, createProbeAgent,
+            predecessorVersion: '0.13.1', timed: progress.timed })
         })
         await check('v070_history_compaction_restart', async () => {
           await open('history')

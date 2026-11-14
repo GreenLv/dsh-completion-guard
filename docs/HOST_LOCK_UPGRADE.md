@@ -2,11 +2,27 @@
 
 Version 0.13.2 requires DSH `>=0.2.2-rc.3` and qualified Cordis `>=4.1.0`. The `0.2.2-rc.2` host is below this floor: upgrade DSH first, then install this Guard version. Fresh installations have no old-mode inventory to adopt; existing installations must preserve their old mode sources before any replacement. Follow this order:
 
-1. Stop the relevant host/session writers. For an **existing installation**, preserve the old installed package and sanitized effective-mode sources, then prepare the public persistence inventory and frozen receipt with the [prepared-candidate migration toolkit](ACTIVATION_MIGRATION.md), **before replacing DSH or Guard**. Unresolved old provenance stays pending. A **fresh installation with no old Guard sessions** skips this old-mode preparation.
-2. Upgrade DSH to at least `0.2.2-rc.3` (always necessary when coming from a `0.2.2-rc.2` or older host), then install this Guard version, keeping writers stopped.
-3. Rebuild the host lock for each profile with `inspect`, `inject` and `verify-dump` from the accepted package or matching prepared source. For a POSIX shell, the entry is `node /absolute/prepared-package/bin/dsh-completion-guard-host-lock.mjs`; pass the actual runtime/profile roots. A successful rebuild reads back `supported` with `audit_provenance` stating how the graph was established.
-4. For an **existing installation**, retain valid existing mode bindings; where migration is needed, run mode `adopt` and `verify` with its frozen old receipt while writers remain stopped, **before starting any host**. Host-lock rebuilding does not perform adoption. For a fresh installation there is no old receipt to adopt.
-5. Start each Web/Headless/Desktop profile only after the applicable mode and host-lock checks pass. These checks do not require a running host.
+Prepare the new tool without changing a profile: download the versioned npm tgz below into a new temporary directory and unpack it. The entry is inside the extracted `package/` directory. `inspect-patch` needs Node.js 24.9.0 or later, but no dependency installation or running DSH host. The example uses a POSIX shell; replace the profile placeholder with an existing profile's absolute path. On Windows, download the same tgz, extract it with the system `tar -xf`, then run the same `.mjs` through `node` using Windows absolute paths and your shell's variable syntax.
+
+新版工具无需先安装到 profile：将下方指定版本的 npm tgz 下载到新临时目录并解包，入口就在解出的 `package/` 内。`inspect-patch` 需要 Node.js 24.9.0 或更高版本，不需要安装依赖或启动 DSH。示例使用 POSIX shell；将 profile 占位符替换为已有配置目录的绝对路径。Windows 可将同一下载链接保存为 tgz，用系统 `tar -xf` 解包，再用 `node` 和 Windows 绝对路径调用同一 `.mjs`；变量语法应按当前 shell 调整。
+
+```sh
+GUARD_PREP_DIR="$(mktemp -d)"
+curl --fail --location --output "$GUARD_PREP_DIR/guard.tgz" \
+  https://registry.npmjs.org/dsh-completion-guard/-/dsh-completion-guard-0.13.2.tgz
+tar -xzf "$GUARD_PREP_DIR/guard.tgz" -C "$GUARD_PREP_DIR"
+node "$GUARD_PREP_DIR/package/bin/dsh-completion-guard-host-lock.mjs" \
+  inspect-patch --profile-root /absolute/existing-profile
+```
+
+1. Before stopping the host or changing dependencies, run the prepared candidate tool `node /absolute/prepared-package/bin/dsh-completion-guard-host-lock.mjs inspect-patch --profile-root /absolute/profile` for each existing profile. Require exit 0 with `status: "supported"` and `inspection_scope: "profile_patch_boundary"`; `managed` and `unmanaged_entries` describe the existing block. A nonzero exit needs diagnosis. This read-only check does not establish host, dependency or loaded-plugin qualification.
+2. Stop the relevant host/session writers. For an **existing installation**, preserve the old installed package and sanitized effective-mode sources, then prepare the public persistence inventory and frozen receipt with the [prepared-candidate migration toolkit](ACTIVATION_MIGRATION.md), **before replacing DSH or Guard**. Unresolved old provenance stays pending. A **fresh installation with no old Guard sessions** skips this old-mode preparation.
+3. Upgrade DSH to at least `0.2.2-rc.3` (always necessary when coming from a `0.2.2-rc.2` or older host), then install this Guard version, keeping writers stopped.
+4. Rebuild the host lock for each profile with `inspect`, `inject` and `verify-dump` from the accepted package or matching prepared source. For a POSIX shell, the entry is `node /absolute/prepared-package/bin/dsh-completion-guard-host-lock.mjs`; pass the actual runtime/profile roots. A successful rebuild reads back `supported` with `audit_provenance` stating how the graph was established.
+5. For an **existing installation**, retain valid existing mode bindings; where migration is needed, run mode `adopt` and `verify` with its frozen old receipt while writers remain stopped, **before starting any host**. Host-lock rebuilding does not perform adoption. For a fresh installation there is no old receipt to adopt.
+6. Start each Web/Headless/Desktop profile only after the applicable mode and host-lock checks pass. These checks do not require a running host.
+
+停宿主或更改依赖前，先用独立准备的候选工具对每个已有的目标 profile 执行 `node /absolute/prepared-package/bin/dsh-completion-guard-host-lock.mjs inspect-patch --profile-root /absolute/profile`。须退出 0 且返回 `status: "supported"`、`inspection_scope: "profile_patch_boundary"`；`managed` 和 `unmanaged_entries` 描述现有块。非零退出须先诊断。此检查只读，不证明宿主、依赖或插件加载资格。
 
 0.13.2 要求 DSH `>=0.2.2-rc.3`：`0.2.2-rc.2` 宿主已低于下限，先升级 DSH 再装 Guard。全新安装没有旧模式需要采纳；已有安装必须在替换前保留旧来源。顺序为：先停相关写者，保存旧安装包和脱敏有效模式来源，以独立准备的候选工具冻结公开库存及旧收据；再按需升级低于下限的 DSH、安装 Guard、重建宿主锁；保持写者停止，保留已有有效模式绑定，仅在需要迁移时于宿主启动前完成旧收据 `adopt` 和 `verify`；最后按需启动。全新安装跳过旧模式准备与 adoption，未知旧来源仍保持 pending，宿主锁不替代模式核验。
 
@@ -138,7 +154,7 @@ Check `supported` on inspect, inject and verify-dump. Keep Desktop stopped until
 
 The official plugin market (`dshmarket`) can be installed into the same Desktop profile through the official management entry; its package name neither conflicts with the Desktop bundle tuple nor grants any trust. Installing or removing the market changes the profile's importer, so the previous Desktop lock stops matching (`host_lock_installed_graph_drift`) and must be rebuilt with the full four-step flow: `inspect`, then `inject`, then generate a NEW composed dump with `dump-desktop`, then verify that new dump with `verify-dump --dump-config <new file>`. `dump-desktop` only composes a configuration for readback; it never substitutes for `verify-dump`. Verify the dump generated after this rebuild — a dump captured before the market change no longer matches and must be discarded. Rebuild the lock on this machine; a lock or digest copied from another profile or machine is not valid evidence. Desktop restart stays unsupported regardless of coexistence.
 
-Desktop 升级顺序相同：先停止应用，必要时将宿主升级至最低要求，再用应用附带的 CLI 安装 Guard。普通外部 CLI 无法管理保留的 Desktop profile。以应用的 `app.asar` 和实际 Desktop profile 路径执行 `inspect`、`inject`、`dump-desktop`、`verify-dump`，确认三项 JSON 回读均为 `supported` 后再打开应用。`dump-desktop` 不启动宿主；配置输出可能包含私人信息，请留在本机。Guard 不修改应用归档，也不负责应用重启。官方插件市场（`dshmarket`）可以通过官方管理入口安装到同一 Desktop profile；其包名既不与 Desktop bundle 元组冲突，也不授予任何信任。安装或移除市场会改变 profile 的 importer，旧 Desktop 锁因此不再匹配（`host_lock_installed_graph_drift`），需要用完整四步流程重建：先 `inspect`，再 `inject`，然后用 `dump-desktop` 生成新的组合配置，最后用 `verify-dump --dump-config <新文件>` 校验这份新配置。`dump-desktop` 只负责生成配置供回读，不能替代 `verify-dump`。请校验本次重建后新生成的 dump——市场变化前捕获的旧 dump 已不匹配，应当丢弃。请在本机重建锁；从其他 profile 或其他机器复制的锁或摘要不构成有效证据。无论是否共存，Desktop 重启仍不受支持。
+Desktop 升级顺序相同：先按前述流程只读预检，再停止应用，必要时将宿主升级至最低要求，再用应用附带的 CLI 安装 Guard。普通外部 CLI 无法管理保留的 Desktop profile。以应用的 `app.asar` 和实际 Desktop profile 路径执行 `inspect`、`inject`、`dump-desktop`、`verify-dump`，确认三项 JSON 回读均为 `supported` 后，核对完整组合配置，再打开应用并观察插件实际加载。Desktop 的 `verify-dump` 只核验 Guard 宿主锁字段，不验证其他 YAML 字段或完整宿主加载。随后仍须核对官方组合配置，并实际冷启动观察目标插件加载。`dump-desktop` 不启动宿主；配置输出可能包含私人信息，请留在本机。Guard 不修改应用归档，也不负责应用重启。官方插件市场（`dshmarket`）可以通过官方管理入口安装到同一 Desktop profile；其包名既不与 Desktop bundle 元组冲突，也不授予任何信任。安装或移除市场会改变 profile 的 importer，旧 Desktop 锁因此不再匹配（`host_lock_installed_graph_drift`），需要用完整四步流程重建：先 `inspect`，再 `inject`，然后用 `dump-desktop` 生成新的组合配置，最后用 `verify-dump --dump-config <新文件>` 校验这份新配置。`dump-desktop` 只负责生成配置供回读，不能替代 `verify-dump`。请校验本次重建后新生成的 dump——市场变化前捕获的旧 dump 已不匹配，应当丢弃。请在本机重建锁；从其他 profile 或其他机器复制的锁或摘要不构成有效证据。无论是否共存，Desktop 重启仍不受支持。
 
 ## Market and restart
 

@@ -4,13 +4,13 @@
 
 ## Before installation
 
-Use the profile you actually run: Web, Headless or Desktop. Stop the relevant host/session writers first. If this installation has old Guard sessions, preserve the old package and effective mode sources, then check retained bindings and prepare any needed inventory and migration receipt using [the migration guide](ACTIVATION_MIGRATION.md) **before replacing DSH or Guard**. Empty old sessions count too. The migration toolkit can run from a separately prepared package directory while the old package stays installed.
+Use the profile you actually run: Web, Headless or Desktop. For an existing profile, first prepare the new package separately and run its read-only [managed-block check](HOST_LOCK_UPGRADE.md) before stopping the host or changing dependencies. A fresh profile has no existing block to inspect. Then stop the relevant host/session writers. If this installation has old Guard sessions, preserve the old package and effective mode sources, then check retained bindings and prepare any needed inventory and migration receipt using [the migration guide](ACTIVATION_MIGRATION.md) **before replacing DSH or Guard**. Empty old sessions count too. The migration toolkit can run from a separately prepared package directory while the old package stays installed.
 
 With no old Guard sessions, there is no old-mode adoption step. Upgrade the host to DSH `>=0.2.2-rc.3` (retired hosts at `0.2.2-rc.2` and below are below this floor), install Guard, and complete the installation checks before startup. Requires Node.js `>=24.9.0`, pnpm `>=11` and a qualified Cordis `>=4.1.0` installation. Do not load both `dsh-context-guard` and `dsh-completion-guard` in one profile; the internal entry ID remains `context-guard`.
 
 ## 安装前
 
-先确认实际使用的 Web、Headless 或 Desktop profile，并停止相应宿主与会话写者。如果已有旧 Guard 会话，替换 DSH 或 Guard **之前**，按[迁移指南](ACTIVATION_MIGRATION.md)保留旧包、核验有效模式来源，核对保留的绑定，并按需冻结会话库存、准备迁移收据。旧空会话也需要清点。迁移工具可以从另行准备的包目录运行，旧包此时仍留在原安装位置。
+先确认实际使用的 Web、Headless 或 Desktop profile。已有 profile 须先另行准备新版工具，按[宿主锁指南](HOST_LOCK_UPGRADE.md)只读检查受管块，再停止宿主或更改依赖；全新 profile 没有旧块需要检查。之后停止相应宿主与会话写者。如果已有旧 Guard 会话，替换 DSH 或 Guard **之前**，按[迁移指南](ACTIVATION_MIGRATION.md)保留旧包、核验有效模式来源，核对保留的绑定，并按需冻结会话库存、准备迁移收据。旧空会话也需要清点。迁移工具可以从另行准备的包目录运行，旧包此时仍留在原安装位置。
 
 没有旧 Guard 会话时，不需要旧模式 adoption。先将 DSH 升级到 `>=0.2.2-rc.3`（已退役的 `0.2.2-rc.2` 及更早宿主低于该下限），再安装 Guard，完成安装核验后启动。需要 Node.js `>=24.9.0`、pnpm `>=11` 及通过资格验证的 Cordis `>=4.1.0`。同一 profile 不要同时加载 `dsh-context-guard` 和 `dsh-completion-guard`，内部条目 ID 仍是 `context-guard`。
 

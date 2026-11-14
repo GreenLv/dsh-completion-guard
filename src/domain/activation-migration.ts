@@ -46,12 +46,12 @@ export function prepareActivationMigration(inventory: SessionBirthIdentity[], pr
 } {
   if (!prior || prior.schema !== 'dsh-activation-prior-modes/v1' || prior.previousPackage?.name !== 'dsh-completion-guard'
     // Reviewed prior sources: the 0.0.x–0.12.x line plus the explicitly
-    // reviewed 0.13.0 predecessor. The CURRENT version (0.13.1) and any
+    // reviewed 0.13.0 and 0.13.1 predecessors. The CURRENT version (0.13.2) and any
     // future release can never impersonate its own predecessor — a later
     // Guard release must consciously extend this reviewed set before it can
     // adopt 0.13.x-era modes.
     || !(/^0\.(?:[0-9]|1[012])\.\d+(?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version)
-      || /^0\.13\.0(?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version))
+      || /^0\.13\.[01](?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version))
     || !/^[a-f0-9]{64}$/u.test(prior.previousPackage.sha256) || !/^[a-f0-9]{64}$/u.test(prior.sourceSha256)
     || !Array.isArray(prior.cohorts) || !prior.cohorts.length) throw new Error('activation_prior_modes_invalid')
   const ids = new Set(inventory.map(i => i.id))

@@ -31,6 +31,15 @@ def advisory(severity: str, module: str = "fixture-pkg", dev: bool | None = True
 
 
 class AuditDependenciesGate(unittest.TestCase):
+    def test_0132_authorization_is_limited_to_three_exact_undici_findings(self) -> None:
+        path = SCRIPT.parent / "dependency-scan-exceptions.json"
+        rows = json.loads(path.read_text(encoding="utf-8"))["exceptions"]
+        selected = [row for row in rows if "0.13.2" in row.get("guard_versions", [])]
+        expected = {"1243472": "GHSA-4w7w-5xrc-9h26", "1243474": "GHSA-2m5v-pch6-74hx", "1243477": "GHSA-qrxm-fqhp-jwvm"}
+        self.assertEqual({row["id"]: row["github_advisory_id"] for row in selected}, expected)
+        for row in selected:
+            self.assertEqual((row["module"], row["version"], row["expires"]), ("undici", "8.11.2", "2026-11-30"))
+
     def test_clean_report_passes(self) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
             json.dump({"advisories": {}}, handle)

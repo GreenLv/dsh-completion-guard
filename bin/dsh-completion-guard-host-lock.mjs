@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import {
   injectActiveProfileHostLock,
+  inspectProfileHostLockPatch,
   prepareActiveHostTrust,
   prepareTargetHostTrust,
   prepareDesktopHostTrust,
@@ -88,11 +89,16 @@ async function writeOutput(stream, text) {
 async function main() {
 try {
   const command = process.argv[2]
-  if (!['inspect', 'inspect-graph', 'inject', 'verify-dump', 'dump-desktop'].includes(command)) {
+  if (!['inspect-patch', 'inspect', 'inspect-graph', 'inject', 'verify-dump', 'dump-desktop'].includes(command)) {
     throw new Error('usage: dsh-completion-guard-host-lock <inspect|inject|verify-dump|dump-desktop> --runtime-root PATH --profile-root PATH [--profile web|headless|desktop] [--dump-config FILE]')
   }
   const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
   const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+  if (command === 'inspect-patch') {
+    const result = inspectProfileHostLockPatch(option('--profile-root'))
+    await writeOutput(process.stdout, `${JSON.stringify({ status: 'supported', inspection_scope: 'profile_patch_boundary', managed: result.managed, unmanaged_entries: result.unmanagedEntries })}\n`)
+    return
+  }
   const profile = selectedProfile()
   if (profile === 'desktop' && (command === 'inspect-graph'
     || (command === 'inspect' && !hasDesktopImporterState(option('--profile-root'))))) {
@@ -190,8 +196,15 @@ try {
   })}\n`)
 } catch (error) {
   const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'host_lock_command_failed'
+  // Only show bounded registry package/member identifiers, never arbitrary
+  // thrown text, absolute paths, controls or credentials from a transport.
+  const raw = error && typeof error === 'object' && typeof error.detail === 'string' ? error.detail : ''
+  const match = /^package ((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*@[0-9A-Za-z.+-]{1,80})(?::|$)/u.exec(raw)
+  const member = /^package [^:]+: member '([^']{1,180})' /u.exec(raw)?.[1]
+  const safeMember = member && /^[A-Za-z0-9_@./+-]+$/u.test(member) && !member.startsWith('/') && !member.split('/').includes('..') ? member : undefined
+  const detail = match ? { package: match[1], ...(safeMember ? { member: safeMember } : {}) } : undefined
   process.exitCode = 1
-  try { await writeOutput(process.stderr, `${JSON.stringify({ status: 'unavailable', reason_code: code })}\n`) } catch { /* A closed diagnostic pipe still fails. */ }
+  try { await writeOutput(process.stderr, `${JSON.stringify({ status: 'unavailable', reason_code: code, ...(detail ? { detail } : {}) })}\n`) } catch { /* A closed diagnostic pipe still fails. */ }
 }
 
 }

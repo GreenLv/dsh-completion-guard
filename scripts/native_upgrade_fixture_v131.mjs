@@ -4,11 +4,13 @@ import { createHash } from 'node:crypto'
 import { lstatSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, sep } from 'node:path'
 
-export function predecessorActivationFixture() {
-  const fixture = JSON.parse(readFileSync(new URL('../tests/fixtures/upgrade/legacy-0.13.0-activation.json', import.meta.url), 'utf8'))
+export function predecessorActivationFixture(version = '0.13.0') {
+  assert.ok(['0.13.0', '0.13.1'].includes(version))
+  const fixture = JSON.parse(readFileSync(new URL(`../tests/fixtures/upgrade/legacy-${version}-activation.json`, import.meta.url), 'utf8'))
   assert.equal(fixture.schema, 'dsh-predecessor-activation-fixture/v1')
-  assert.equal(fixture.predecessorVersion, '0.13.0')
-  assert.equal(fixture.sourceCommit, '650a952a7d44d4be2b9019dadc2f11e5104ff06e')
+  assert.equal(fixture.predecessorVersion, version)
+  assert.equal(fixture.sourceCommit, version === '0.13.1' ? '38ea950380fffda88d9b48d5cdedd2c6ba6f0c61' : '650a952a7d44d4be2b9019dadc2f11e5104ff06e')
+  if (version === '0.13.1') assert.equal(fixture.predecessorTgzSha256, 'db1471029c06e535bf2da0e431ecd484f29c1e2e3509d134696bec8334b11075')
   assert.equal(fixture.rows.length, 6)
   for (const row of fixture.rows) {
     assert.equal(createHash('sha256').update(row.binding).digest('hex'), row.bindingSha256)
@@ -25,8 +27,8 @@ export function predecessorActivationFixture() {
 }
 
 export async function runPredecessorActivationFixture({ ctx, config, domain, SessionId, createUserMessage, createProbeAgent,
-  timed = (_label, fn) => fn() }) {
-  const rows = predecessorActivationFixture().rows.filter(row => row.profile === config.profile)
+  predecessorVersion = '0.13.0', timed = (_label, fn) => fn() }) {
+  const rows = predecessorActivationFixture(predecessorVersion).rows.filter(row => row.profile === config.profile)
   assert.equal(rows.length, 2, 'explicit native profile required')
   const modeRoot = domain.resolveActivationBindingsRoot(process.env.DSH_HOME)
   mkdirSync(modeRoot, { recursive: true, mode: 0o700 })

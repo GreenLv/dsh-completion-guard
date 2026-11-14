@@ -15,8 +15,8 @@ import { inject as nativeProbeInject } from '../scripts/native_host_probe_v070.m
 
 const dirs = []
 afterEach(() => { for (const p of dirs.splice(0)) rmSync(p, { recursive: true, force: true }) })
-it('binds both modes on every native profile to the executed 0.13.0 writer and its exact module inventory', () => {
-  const fixture = predecessorActivationFixture()
+it.each(['0.13.0', '0.13.1'])('binds both modes on every native profile to the executed %s writer and its exact module inventory', version => {
+  const fixture = predecessorActivationFixture(version)
   expect(new Set(fixture.rows.map(row => row.profile))).toEqual(new Set(['web', 'headless', 'desktop']))
   expect(fixture.moduleHashes['dist/domain/index.js']).toMatch(/^[a-f0-9]{64}$/)
   for (const row of fixture.rows) {
@@ -25,13 +25,13 @@ it('binds both modes on every native profile to the executed 0.13.0 writer and i
   }
 })
 
-it.each([...['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].map(compression => [profile, compression, false])),
-  ['web', 'none', true]])('checks predecessor bytes and live state on %s/%s restores (misreport=%s)', async (profile, compression, misreport) => {
+it.each([...['0.13.0', '0.13.1'].flatMap(version => ['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].map(compression => [version, profile, compression, false]))),
+  ['0.13.1', 'web', 'none', true]])('checks %s predecessor bytes and live state on %s/%s restores (misreport=%s)', async (version, profile, compression, misreport) => {
   const root = mkdtempSync(join(tmpdir(), 'guard-native-upgrade-')); dirs.push(root)
   const require = createRequire(join(process.cwd(), 'package.json'))
   const persistence = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href)
   const ctx = new Context()
-  const plugin = ctx.plugin(persistence.default ?? persistence, { root: join(root, 'logs'), compression })
+  const plugin = ctx.plugin(persistence.apply ?? persistence.default ?? persistence, { root: join(root, 'logs'), compression })
   await plugin.await()
   const projections = new WeakMap()
   const commands = new CommandRuntime(ctx)
@@ -78,7 +78,7 @@ it.each([...['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].m
   }
   try {
     const run = () => runPredecessorActivationFixture({ ctx: adapter, config: { profile, workRoot: root }, domain,
-      SessionId, createUserMessage, createProbeAgent, timed })
+      SessionId, createUserMessage, createProbeAgent, predecessorVersion: version, timed })
     if (misreport) {
       await expect(run()).rejects.toThrow('effective loaded Guard enablement')
       expect(stages).toContainEqual({ label: 'upgrade_verify_live_status', status: 'failed' })
@@ -91,7 +91,7 @@ it.each([...['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].m
       expect(stages.filter(stage => stage.label === label && stage.status === 'passed')).toHaveLength(4)
     }
     expect(handles.size).toBe(0)
-    for (const row of predecessorActivationFixture().rows.filter(row => row.profile === profile)) {
+    for (const row of predecessorActivationFixture(version).rows.filter(row => row.profile === profile)) {
       const binding = domain.activationBindingPath(domain.resolveActivationBindingsRoot(root), row.header.id)
       expect(readFileSync(binding, 'utf8')).toBe(row.binding)
       const reader = await ctx.sessionPersistence.open(SessionId(row.header.id), 'read')

@@ -54,6 +54,7 @@ PROBE_V070_DRIVER_FILES = (
     "native_host_probe.mjs", "native_host_probe_v070.mjs", "native_release_fixture_v070.mjs",
     "native_incident_fixture_v070.mjs", "native_upgrade_fixture_v131.mjs",
     "../tests/fixtures/upgrade/legacy-0.13.0-activation.json",
+    "../tests/fixtures/upgrade/legacy-0.13.1-activation.json",
 )
 
 
@@ -452,10 +453,10 @@ def http_json(origin: str, path: str, method: str = "GET", request_origin: str |
         return exc.code, {}
 
 
-# Original cases: 12 opens/resumes; incident pairs: 12; predecessor restore: 4.
+# Original cases: 12 opens/resumes; incident pairs: 12; two predecessor restores: 8.
 # Keep each open's 90s bound plus 360s for storage, local Git and cleanup.
 # This is an aggregate budget, not permission to extend a tool timeout.
-INITIAL_V070_TIMEOUT = 28 * 90 + 360
+INITIAL_V070_TIMEOUT = 32 * 90 + 360
 RESTART_TIMEOUT = 90
 RESTART_V070_TIMEOUT = 180
 
