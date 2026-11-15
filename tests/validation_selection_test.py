@@ -181,6 +181,16 @@ class ValidationSelectionTests(unittest.TestCase):
         self.assertIn("package_tests", plan["gates"])
         self.assertNotIn("artifact", plan["invalidates"])
 
+    def test_release_notes_tool_and_tests_have_owning_gates(self) -> None:
+        for path in ("scripts/release-notes.mjs", "tests/release-notes.node.mjs"):
+            with self.subTest(path=path):
+                plan = self.classify(path)
+                self.assertEqual(plan["unknown_paths"], [])
+                self.assertIn("package_tests", plan["gates"])
+                self.assertIn("docs_contract", plan["gates"])
+                self.assertNotIn("artifact", plan["invalidates"])
+                self.assertNotIn("native_runtime", plan["invalidates"])
+
     def test_stats_change_does_not_select_product_suite(self) -> None:
         plan = self.classify("scripts/npm-download-stats.mjs")
         self.assertEqual(plan["gates"], ["stats_tests"])

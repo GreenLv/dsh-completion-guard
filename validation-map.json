@@ -331,6 +331,22 @@
       "peer_gates": {}
     },
     {
+      "id": "release_notes",
+      "paths": [
+        "scripts/release-notes.mjs",
+        "tests/release-notes.node.mjs"
+      ],
+      "gates": [
+        "docs_contract",
+        "package_tests"
+      ],
+      "invalidates": [
+        "documentation"
+      ],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
       "id": "package_tests",
       "paths": [
         "tests/release-pack.node.mjs"
