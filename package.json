@@ -71,7 +71,8 @@
     "build": "tsdown",
     "lint": "oxlint src tests",
     "test": "vitest run",
-    "test:release-pack": "node --test tests/release-pack.node.mjs",
+    "test:release-pack": "node --test tests/release-pack.node.mjs tests/release-notes.node.mjs",
+    "release:notes": "node scripts/release-notes.mjs",
     "test:stats": "node --test tests/npm-download-stats.node.mjs",
     "typecheck": "tsc --noEmit",
     "pack:check": "pnpm pack --dry-run --json"
