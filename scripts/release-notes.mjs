@@ -219,7 +219,9 @@ async function main() {
     catch (error) {
       if (error.code !== "ENOENT") throw error;
       missing.unshift(basename(ancestor));
-      ancestor = dirname(ancestor);
+      const parent = dirname(ancestor);
+      if (parent === ancestor) throw error;
+      ancestor = parent;
     }
   }
   const output = resolve(ancestor, ...missing);

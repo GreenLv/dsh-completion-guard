@@ -119,3 +119,17 @@ test("CLI defaults to package version and cannot overwrite frozen notes or write
     await assert.rejects(access(join(source, "new-parent")));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("CLI terminates for an unavailable Windows output drive", { skip: process.platform !== "win32" }, async (context) => {
+  let absent;
+  for (const drive of ["Z", "Y", "X", "W", "V", "U"]) {
+    try { await access(`${drive}:\\`); }
+    catch (error) { if (error.code === "ENOENT") { absent = drive; break; } }
+  }
+  if (!absent) { context.skip("No unavailable drive among the probe candidates"); return; }
+  const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), "scripts/release-notes.mjs");
+  const result = spawnSync(process.execPath, [cli, "--output-dir", `${absent}:\\dcg-release-notes-unused\\notes`], { encoding: "utf8", timeout: 5000 });
+  assert.equal(result.error, undefined, "CLI must exit rather than time out");
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /ENOENT/);
+});
