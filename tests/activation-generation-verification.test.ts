@@ -65,9 +65,27 @@ describe('SDK generation verification',()=>{
  },60000)
  it('rejects truncated zstd frames and cleans private workspace',async()=>{
   const f=await fixture('zstd');const path=join(f.dir,`session.v1.jsonl${f.suffix}`), bytes=readFileSync(path);writeFileSync(path,bytes.subarray(0,-1));f.args.generations=descriptors(f.root,'zstd')
-  const before=new Set(readdirSync(tmpdir()).filter(x=>x.startsWith('dsh-generation-check-')))
-  await expect(verifyActivationGenerations(f.args)).rejects.toThrow()
-  expect(readdirSync(tmpdir()).filter(x=>x.startsWith('dsh-generation-check-')).filter(x=>!before.has(x))).toEqual([])
+  const originalTemp=tmpdir(), base=realpathSync(mkdtempSync(join(originalTemp,'dsh-generation-cleanup-test-')));roots.push(base)
+  const variables=process.platform==='win32'?['TEMP','TMP']:['TMPDIR'];const previous=variables.map(key=>process.env[key])
+  let captures=0, observed: string[]=[], foreign: string|undefined
+  f.args.capture=()=>{
+   if(++captures===2){
+    observed=readdirSync(base)
+    // Another worker may create a same-prefix workspace during verification.
+    // It is outside this invocation's base and must remain untouched.
+    foreign=mkdtempSync(join(originalTemp,'dsh-generation-check-'));roots.push(foreign)
+    writeFileSync(join(foreign,'owner'),'another invocation')
+   }
+   return f.args.censusSha256
+  }
+  try {
+   for(const key of variables)process.env[key]=base
+   await expect(verifyActivationGenerations(f.args)).rejects.toThrow('activation_generation_unverified')
+  } finally { variables.forEach((key,i)=>{if(previous[i]===undefined)delete process.env[key];else process.env[key]=previous[i]}) }
+  expect(captures).toBe(2)
+  expect(observed).toHaveLength(1);expect(observed[0]).toMatch(/^dsh-generation-check-/u)
+  expect(readdirSync(base)).toEqual([])
+  expect(foreign).toBeDefined();expect(readFileSync(join(foreign!,'owner'),'utf8')).toBe('another invocation')
  })
  it('rejects a linked generation rather than following it',async()=>{
   const f=await fixture('none'), path=join(f.dir,'session.v1.jsonl'), bytes=readFileSync(path);rmSync(path);const other=join(f.root,'other');writeFileSync(other,bytes);try { symlinkSync(other,path,'file') } catch (error) { if (process.platform !== 'win32' || !['EPERM','EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error; linkSync(other,path) }
