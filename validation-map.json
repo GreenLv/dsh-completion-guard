@@ -429,6 +429,8 @@
         "scripts/native_desktop_acceptance.py",
         "scripts/native_desktop_market_acceptance.py",
         "scripts/native_desktop_tools.mjs",
+        "scripts/native_profile_preservation.mjs",
+        "tests/native_profile_preservation.node.mjs",
         "scripts/native_host_probe.mjs",
         "scripts/native_host_probe_v070.mjs",
         "scripts/native_release_fixture_v070.mjs",

@@ -92,7 +92,7 @@ def market_driver_digest(root: Path) -> str:
     files = [root / "scripts" / name for name in (
         "native_acceptance.py", "native_host_acceptance.py",
         "native_desktop_acceptance.py", "native_desktop_market_acceptance.py",
-        "native_desktop_tools.mjs", *host.PROBE_V070_DRIVER_FILES)]
+        "native_desktop_tools.mjs", "native_profile_preservation.mjs", *host.PROBE_V070_DRIVER_FILES)]
     return hashlib.sha256(b"".join(path.name.encode() + b"\0" + path.read_bytes() + b"\0"
                                    for path in files)).hexdigest()
 
