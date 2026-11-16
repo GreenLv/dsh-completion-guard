@@ -13,6 +13,7 @@ jobs:
     name: Classify candidate bytes
     runs-on: ubuntu-latest
     outputs:
+      plan: ${{ steps.select.outputs.plan }}
       invalidates: ${{ steps.select.outputs.invalidates }}
       full_matrix: ${{ steps.select.outputs.full_matrix }}
     steps:
@@ -26,10 +27,14 @@ jobs:
         run: |
           set -euo pipefail
           base_sha="$EVENT_BASE_SHA"
+          control_sha="$EVENT_BASE_SHA"
           if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
             base_sha="$(git hash-object -t tree /dev/null)"
+            control_sha="$EVENT_HEAD_SHA"
           fi
-          python scripts/select_validation.py --repo-root . --base "$base_sha" --head "$EVENT_HEAD_SHA" --github-output "$GITHUB_OUTPUT"
+          git show "$control_sha:scripts/select_validation.py" > "$RUNNER_TEMP/base-selector.py"
+          git show "$control_sha:validation-map.json" > "$RUNNER_TEMP/base-map.json"
+          python "$RUNNER_TEMP/base-selector.py" --repo-root . --map "$RUNNER_TEMP/base-map.json" --base "$base_sha" --head "$EVENT_HEAD_SHA" --github-output "$GITHUB_OUTPUT"
 
   dependency-scan:
     name: Dependency advisory gate
@@ -103,6 +108,9 @@ jobs:
     with:
       runner: ubuntu-latest
       node-version: "24.9.0"
+      force_full: ${{ github.event_name == 'workflow_dispatch' }}
+      checkout_ref: ${{ github.sha }}
+      validation_plan: ${{ needs.classify.outputs.plan }}
       full_suite: true
 
   ubuntu_node24x:
@@ -112,6 +120,9 @@ jobs:
     with:
       runner: ubuntu-latest
       node-version: "24"
+      force_full: ${{ github.event_name == 'workflow_dispatch' }}
+      checkout_ref: ${{ github.sha }}
+      validation_plan: ${{ needs.classify.outputs.plan }}
       full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   macos_node2490:
@@ -121,6 +132,9 @@ jobs:
     with:
       runner: macos-latest
       node-version: "24.9.0"
+      force_full: ${{ github.event_name == 'workflow_dispatch' }}
+      checkout_ref: ${{ github.sha }}
+      validation_plan: ${{ needs.classify.outputs.plan }}
       full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   macos_node24x:
@@ -130,6 +144,9 @@ jobs:
     with:
       runner: macos-latest
       node-version: "24"
+      force_full: ${{ github.event_name == 'workflow_dispatch' }}
+      checkout_ref: ${{ github.sha }}
+      validation_plan: ${{ needs.classify.outputs.plan }}
       full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   windows_node2490:
@@ -139,6 +156,9 @@ jobs:
     with:
       runner: windows-latest
       node-version: "24.9.0"
+      force_full: ${{ github.event_name == 'workflow_dispatch' }}
+      checkout_ref: ${{ github.sha }}
+      validation_plan: ${{ needs.classify.outputs.plan }}
       full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   windows_node24x:
@@ -148,6 +168,9 @@ jobs:
     with:
       runner: windows-latest
       node-version: "24"
+      force_full: ${{ github.event_name == 'workflow_dispatch' }}
+      checkout_ref: ${{ github.sha }}
+      validation_plan: ${{ needs.classify.outputs.plan }}
       full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   portable_windows:

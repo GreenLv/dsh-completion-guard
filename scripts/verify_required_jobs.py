@@ -19,8 +19,8 @@ class SummaryError(ValueError):
 
 
 def evaluate(required: Any, observed: Any) -> dict[str, list[str]]:
-    if not isinstance(required, list) or len(required) > 128:
-        raise SummaryError("required must be a bounded list")
+    if not isinstance(required, list) or not required or len(required) > 128:
+        raise SummaryError("required must be a nonempty bounded list")
     if any(not isinstance(item, str) or not IDENTIFIER.fullmatch(item) for item in required):
         raise SummaryError("required contains an invalid job ID")
     if len(required) != len(set(required)):

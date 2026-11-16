@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
+import json
+import subprocess
 import unittest
+from unittest import mock
 from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "run_selected_validation.py"
@@ -42,6 +47,48 @@ class SelectedValidationTests(unittest.TestCase):
     def test_unknown_gate_fails_closed(self) -> None:
         with self.assertRaisesRegex(RUNNER.RunSelectionError, "unknown gate"):
             RUNNER.commands_for(plan(["invented"], ["src/index.ts"]))
+
+    def test_desktop_profile_group_has_real_node_and_consumer_commands(self) -> None:
+        commands = RUNNER.commands_for(plan(['desktop_profile_tests'], ['scripts/native_profile_preservation.mjs']))
+        joined = [' '.join(command) for command in commands]
+        self.assertIn('node --test --test-reporter=tap tests/native_profile_preservation.node.mjs', joined)
+        self.assertTrue(any('tests.native_desktop_acceptance_test' in item and 'tests.validate_native_desktop_market_test' in item for item in joined))
+        self.assertFalse(any('pnpm test' in item for item in joined))
+
+    def test_desktop_group_rejects_empty_plan_and_non_evidence(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(RUNNER.main(['--plan-json', json.dumps(plan(['docs_contract'], ['AGENTS.md'])), '--platform-only']), 2)
+        node, python = RUNNER.desktop_profile_commands()
+        for output in ('', '# tests 0\n# pass 0\n# skipped 0\n', '# tests 9\n# pass 8\n# skipped 1\n'):
+            self.assertFalse(RUNNER.group_output_valid(node, output))
+        self.assertTrue(RUNNER.group_output_valid(node, '# tests 9\n# pass 9\n# skipped 0\n'))
+        self.assertFalse(RUNNER.group_output_valid(python, 'Ran 2 tests in 0.1s\nOK (skipped=2)'))
+        self.assertFalse(RUNNER.group_output_valid(python, ''))
+        self.assertTrue(RUNNER.group_output_valid(python, 'Ran 2 tests in 0.1s\nOK'))
+        self.assertFalse(RUNNER.fixture_output_valid('Tests 4 skipped (4)'))
+        self.assertFalse(RUNNER.fixture_output_valid('Tests 3 passed | 1 skipped (4)'))
+        self.assertTrue(RUNNER.fixture_output_valid('Tests 4 passed (4)'))
+
+    def test_desktop_execution_rejects_skipped_or_all_skipped_results(self) -> None:
+        args = ['--plan-json', json.dumps(plan(['desktop_profile_tests'], ['scripts/native_profile_preservation.mjs'])), '--platform-only']
+        node_ok = subprocess.CompletedProcess([], 0, '# tests 9\n# pass 9\n# skipped 0\n', '')
+        node_skipped = subprocess.CompletedProcess([], 0, '# tests 9\n# pass 8\n# skipped 1\n', '')
+        python_skipped = subprocess.CompletedProcess([], 0, '', 'Ran 2 tests in 0.1s\nOK (skipped=2)')
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), mock.patch.object(RUNNER.subprocess, 'run', return_value=node_skipped):
+            self.assertEqual(RUNNER.main(args), 1)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), mock.patch.object(RUNNER.subprocess, 'run', side_effect=[node_ok, python_skipped]):
+            self.assertEqual(RUNNER.main(args), 1)
+
+    def test_full_platform_runs_fixture_unless_full_suite_already_covered_it(self) -> None:
+        args = ['--plan-json', json.dumps(plan(['full_candidate'], ['validation-map.json'])), '--platform-only', '--list']
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(RUNNER.main(args), 0)
+        self.assertIn(RUNNER.native_fixture_commands()[0], json.loads(output.getvalue()))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(RUNNER.main([*args, '--fixtures-covered']), 0)
+        self.assertNotIn(RUNNER.native_fixture_commands()[0], json.loads(output.getvalue()))
 
     def test_full_candidate_includes_complete_local_gate_once(self) -> None:
         commands = RUNNER.commands_for(plan(["full_candidate"], ["validation-map.json"]))

@@ -43,6 +43,23 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("continue-on-error", text)
         self.assertIn("name: PR validation required", text)
         self.assertIn("if: always()", text)
+        self.assertIn('node-version: "24.9.0"', text)
+        self.assertIn('checkout_ref: ${{ github.event.pull_request.head.sha }}', text)
+        self.assertIn('git show "$EVENT_BASE_SHA:scripts/select_validation.py"', text)
+        self.assertIn('git show "$EVENT_BASE_SHA:validation-map.json"', text)
+        self.assertIn('["classify","selected_validation","desktop_macos","desktop_windows"]', text)
+
+    def test_candidate_classifies_with_base_policy_and_binds_lane_head(self) -> None:
+        text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        self.assertIn('git show "$control_sha:scripts/select_validation.py"', text)
+        self.assertIn('git show "$control_sha:validation-map.json"', text)
+        self.assertEqual(text.count('checkout_ref: ${{ github.sha }}'), 6)
+        self.assertEqual(text.count("force_full: ${{ github.event_name == 'workflow_dispatch' }}"), 6)
+        lane = (ROOT / '.github/workflows/ci-lane.yml').read_text(encoding='utf-8')
+        self.assertIn('ref: ${{ inputs.checkout_ref }}', lane)
+        self.assertIn('--frozen-lockfile --ignore-scripts', lane)
+        self.assertIn('if: inputs.force_full || contains(inputs.validation_plan', lane)
+        self.assertIn('"gates":["full_candidate"]', lane)
 
     def test_portable_windows_consumes_one_escrowed_artifact(self) -> None:
         text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

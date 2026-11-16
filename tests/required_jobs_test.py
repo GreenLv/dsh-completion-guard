@@ -14,6 +14,10 @@ SPEC.loader.exec_module(SUMMARY)
 
 
 class RequiredSummaryTests(unittest.TestCase):
+    def test_rejects_empty_required_list(self) -> None:
+        with self.assertRaisesRegex(SUMMARY.SummaryError, 'nonempty'):
+            SUMMARY.evaluate([], {})
+
     def test_accepts_all_required_successes(self) -> None:
         result = SUMMARY.evaluate(["static", "focused_tests"], {"static": "success", "focused_tests": "success", "optional": "skipped"})
         self.assertEqual(result["passed"], ["focused_tests", "static"])

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import copy
+import contextlib
+import io
+import json
 import subprocess
 import tempfile
 import unittest
@@ -95,6 +99,28 @@ class ValidationSelectionTests(unittest.TestCase):
             plan = SELECTOR.classify(self.mapping, SELECTOR.changed_paths(root, head, new_head),
                                      map_sha256=self.map_sha256, base=head, head=new_head)
             self.assertTrue(SELECTOR.full_portability_matrix(plan, root))
+
+    def test_deleted_desktop_input_promotes_full_even_with_explicit_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def git(*args):
+                return subprocess.run(['git', '-C', str(root), '-c', 'user.name=Test', '-c',
+                                       'user.email=test@example.invalid', *args], check=True,
+                                      capture_output=True, text=True).stdout.strip()
+            git('init', '-q')
+            path = root / 'scripts/native_profile_preservation.mjs'
+            path.parent.mkdir(parents=True)
+            path.write_text('export const test = true\n')
+            git('add', '.'); git('commit', '-qm', 'base'); base = git('rev-parse', 'HEAD')
+            path.unlink(); git('add', '-A'); git('commit', '-qm', 'delete'); head = git('rev-parse', 'HEAD')
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = SELECTOR.main(['--repo-root', str(root), '--map', str(ROOT / 'validation-map.json'),
+                                      '--base', base, '--head', head, '--path', 'scripts/native_profile_preservation.mjs'])
+            self.assertEqual(code, 0)
+            plan = json.loads(output.getvalue())
+            self.assertTrue(plan['full_required'])
+            self.assertIn('native_artifact', plan['invalidates'])
 
     def test_packaged_docs_invalidate_artifact(self) -> None:
         plan = self.classify("docs/ARCHITECTURE.md")
@@ -206,6 +232,16 @@ class ValidationSelectionTests(unittest.TestCase):
         self.assertTrue(plan["full_required"])
         self.assertEqual(plan["gates"], ["full_candidate"])
 
+    def test_candidate_map_cannot_demote_validation_control_paths(self) -> None:
+        mapping = copy.deepcopy(self.mapping)
+        mapping['rules'] = [rule for rule in mapping['rules'] if rule['id'] != 'validation_infrastructure']
+        mapping['rules'].append({'id': 'fake_fast', 'paths': ['validation-map.json', '.github/workflows/ci*.yml'],
+                                 'gates': ['docs_contract'], 'invalidates': [], 'contracts': [], 'peer_gates': {}})
+        for path in ('validation-map.json', '.github/workflows/ci-lane.yml'):
+            plan = SELECTOR.classify(mapping, [path], map_sha256=self.map_sha256, base='a' * 40, head='b' * 40)
+            self.assertIn('full_candidate', plan['gates'])
+            self.assertTrue(plan['full_required'])
+
     def test_new_native_profile_paths_are_mapped(self) -> None:
         for path in ("scripts/native_host_probe_v070.mjs", "scripts/native_release_fixture_v070.mjs",
                      "schemas/native-host-probe-v2.schema.json", "schemas/native-host-bound-v4.schema.json",
@@ -217,6 +253,33 @@ class ValidationSelectionTests(unittest.TestCase):
             self.assertEqual(plan["unknown_paths"], [])
             self.assertIn("native_artifact", plan["invalidates"])
             self.assertTrue(plan["full_required"])
+
+    def test_desktop_tool_group_is_narrow_but_mixed_changes_escalate(self) -> None:
+        paths = ('scripts/native_desktop_acceptance.py', 'scripts/native_desktop_market_acceptance.py',
+                 'scripts/native_desktop_tools.mjs', 'scripts/native_profile_preservation.mjs',
+                 'tests/native_profile_preservation.node.mjs')
+        plan = self.classify(*paths)
+        self.assertEqual(plan['gates'], ['desktop_profile_tests'])
+        self.assertEqual(plan['invalidates'], ['desktop_native'])
+        self.assertFalse(plan['full_required'])
+        with mock.patch.object(SELECTOR.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
+            self.assertFalse(SELECTOR.full_portability_matrix(plan, ROOT))
+        self.assertTrue(self.classify(*paths, 'validation-map.json')['full_required'])
+        self.assertTrue(self.classify(*paths, '.github/workflows/ci-lane.yml')['full_required'])
+        self.assertTrue(self.classify(*paths, 'unknown.bin')['full_required'])
+        self.assertIn('native_artifact', self.classify(*paths, 'scripts/native_acceptance.py')['invalidates'])
+        with mock.patch.object(SELECTOR.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'git')):
+            self.assertTrue(SELECTOR.full_portability_matrix(plan, ROOT))
+
+    def test_registration_and_tool_change_keeps_mechanism_gate(self) -> None:
+        paths = ['.github/workflows/ci-lane.yml', 'validation-map.json',
+                 'scripts/native_desktop_acceptance.py', 'scripts/native_desktop_market_acceptance.py',
+                 'scripts/native_desktop_tools.mjs', 'scripts/native_profile_preservation.mjs',
+                 'tests/native_profile_preservation.node.mjs']
+        plan = self.classify(*paths)
+        self.assertEqual(len(paths), 7)
+        self.assertTrue(plan['full_required'])
+        self.assertIn('desktop_profile_tests', plan['gates'])
 
     def test_native_tool_batch_producers_and_test_invalidate_native_runtime(self) -> None:
         for path in ("scripts/native_host_probe.mjs", "scripts/native_host_probe_v070.mjs",

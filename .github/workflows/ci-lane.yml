@@ -15,6 +15,18 @@ on:
         description: Run the complete Vitest suite instead of the portability smoke group
         required: true
         type: boolean
+      validation_plan:
+        description: Exact selector plan for owning tool checks
+        required: true
+        type: string
+      checkout_ref:
+        description: Exact candidate commit
+        required: true
+        type: string
+      force_full:
+        description: Manual full matrix also runs owning tool groups
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -25,6 +37,8 @@ jobs:
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.checkout_ref }}
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           version: 10
@@ -60,6 +74,25 @@ jobs:
       - name: Test repair-family runner portability
         run: node --test tests/repair-families.node.mjs
       - name: Test warm native tooling portability
-        run: node --test tests/native_warm_guard_adapter.node.mjs tests/native_warm_guard_plugin.node.mjs tests/native_warm_scope_consumer.node.mjs tests/native_warm_scope_core.node.mjs tests/native_profile_preservation.node.mjs
+        run: node --test tests/native_warm_guard_adapter.node.mjs tests/native_warm_guard_plugin.node.mjs tests/native_warm_scope_consumer.node.mjs tests/native_warm_scope_core.node.mjs
       - name: Test warm native runner and result binding
         run: python -m unittest tests.test_native_warm_acceptance tests.test_native_warm_runtime_copy tests.test_native_warm_schema tests.test_native_warm_scope_preflight tests.test_native_warm_scope_validate
+      - name: Install locked profile resolution SDK fixture
+        if: inputs.force_full || contains(inputs.validation_plan, 'desktop_profile_tests') || contains(inputs.validation_plan, 'full_candidate')
+        run: pnpm --dir tests/fixtures/profile-resolution-rc3 install --ignore-workspace --frozen-lockfile --ignore-scripts
+      - name: Test selected platform tooling
+        if: inputs.force_full || contains(inputs.validation_plan, 'desktop_profile_tests') || contains(inputs.validation_plan, 'full_candidate') || (contains(inputs.validation_plan, 'native_fixture_tests') && !inputs.full_suite)
+        shell: bash
+        env:
+          VALIDATION_PLAN: ${{ inputs.validation_plan }}
+          FULL_SUITE: ${{ inputs.full_suite }}
+          FORCE_FULL: ${{ inputs.force_full }}
+        run: |
+          if [[ "$FORCE_FULL" == "true" ]]; then
+            VALIDATION_PLAN='{"schema":"change-scoped-validation-plan/v1","gates":["full_candidate"],"changed_paths":[],"base_sha":null,"head_sha":null}'
+          fi
+          if [[ "$FULL_SUITE" == "true" ]]; then
+            python scripts/run_selected_validation.py --plan-json "$VALIDATION_PLAN" --platform-only --fixtures-covered
+          else
+            python scripts/run_selected_validation.py --plan-json "$VALIDATION_PLAN" --platform-only
+          fi

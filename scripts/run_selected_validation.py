@@ -16,7 +16,7 @@ PLAN_SCHEMA = "change-scoped-validation-plan/v1"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 KNOWN_GATES = {
     "artifact_identity", "build", "contract_tests", "docs_contract",
-    "focused_tests", "full_candidate", "host_lock_tests", "lint",
+    "focused_tests", "full_candidate", "host_lock_tests", "lint", "desktop_profile_tests", "native_fixture_tests",
     "package_tests", "static_contracts", "stats_tests", "typecheck",
 }
 
@@ -125,9 +125,42 @@ def commands_for(value: Any) -> list[list[str]]:
                 ["pnpm", "run", "build"],
                 ["git", "diff", "--exit-code", "--", "dist"],
             ])
+    if "desktop_profile_tests" in gates or "full_candidate" in gates:
+        commands.extend(desktop_profile_commands())
+    if 'native_fixture_tests' in gates and 'full_candidate' not in gates:
+        commands.extend(native_fixture_commands())
     if plan.get("base_sha") and plan.get("head_sha"):
         commands.append(["git", "diff", "--check", plan["base_sha"], plan["head_sha"], "--"])
     return unique(commands)
+
+
+def desktop_profile_commands() -> list[list[str]]:
+    return [
+        ['node', '--test', '--test-reporter=tap', 'tests/native_profile_preservation.node.mjs'],
+        [sys.executable, '-m', 'unittest', 'tests.native_desktop_acceptance_test',
+         'tests.native_desktop_market_acceptance_test', 'tests.validate_native_desktop_test',
+         'tests.validate_native_desktop_market_test'],
+    ]
+
+
+def native_fixture_commands() -> list[list[str]]:
+    return [['pnpm', 'exec', 'vitest', 'run', 'tests/module-eol.test.ts',
+             'tests/native-release-fixture.test.ts', '--maxWorkers=1', '--no-file-parallelism', '--disableConsoleIntercept', '--no-color']]
+
+
+def group_output_valid(command: list[str], output: str) -> bool:
+    if command[0] == 'node':
+        counts = {key: int(number) for key, number in re.findall(r'^# (tests|pass|skipped) (\d+)\s*$', output, re.MULTILINE)}
+        return counts.get('tests', 0) >= 9 and counts.get('pass') == counts['tests'] and counts.get('skipped') == 0
+    total = re.search(r'Ran (\d+) tests?', output)
+    skipped = re.search(r'OK \(skipped=(\d+)\)', output)
+    return bool(total and re.search(r'^OK(?: \(skipped=\d+\))?\s*$', output, re.MULTILINE)
+                and int(total.group(1)) > 0 and (not skipped or int(skipped.group(1)) < int(total.group(1))))
+
+
+def fixture_output_valid(output: str) -> bool:
+    match = re.search(r'Tests\s+(\d+) passed \((\d+)\)', output)
+    return bool(match and int(match.group(1)) >= 4 and match.group(1) == match.group(2))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -135,9 +168,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--plan-json", required=True)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--list", action="store_true", dest="list_only")
+    parser.add_argument("--platform-only", action="store_true")
+    parser.add_argument("--fixtures-covered", action="store_true", help="full Vitest suite already ran on this lane")
     args = parser.parse_args(argv)
     try:
-        commands = commands_for(json.loads(args.plan_json))
+        plan = validate_plan(json.loads(args.plan_json))
+        gates = set(plan['gates'])
+        if args.platform_only and not {'desktop_profile_tests', 'native_fixture_tests', 'full_candidate'} & gates:
+            raise RunSelectionError('platform group is not selected')
+        commands = []
+        if args.platform_only:
+            if {'desktop_profile_tests', 'full_candidate'} & gates:
+                commands.extend(desktop_profile_commands())
+            if {'native_fixture_tests', 'full_candidate'} & gates and not args.fixtures_covered:
+                commands.extend(native_fixture_commands())
+        else:
+            commands = commands_for(plan)
+        if args.platform_only and not commands:
+            raise RunSelectionError('platform group has no commands to run')
     except (json.JSONDecodeError, RunSelectionError) as exc:
         print(f"selected_validation=invalid: {exc}", file=sys.stderr)
         return 2
@@ -146,9 +194,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     for command in commands:
         print("+ " + " ".join(command), flush=True)
-        result = subprocess.run(command, cwd=args.repo_root, check=False)
+        checked_group = command in desktop_profile_commands() or command in native_fixture_commands()
+        result = subprocess.run(command, cwd=args.repo_root, check=False, text=True, capture_output=checked_group)
+        if checked_group:
+            print(result.stdout or '', end='')
+            print(result.stderr or '', end='', file=sys.stderr)
         if result.returncode:
             return result.returncode
+        if checked_group:
+            output = (result.stdout or '') + '\n' + (result.stderr or '')
+            valid = fixture_output_valid(output) if command in native_fixture_commands() else group_output_valid(command, output)
+            if not valid:
+                print('desktop_tests=missing_or_skipped', file=sys.stderr)
+                return 1
     return 0
 
 

@@ -36,8 +36,11 @@ jobs:
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          python scripts/select_validation.py \
+          git show "$EVENT_BASE_SHA:scripts/select_validation.py" > "$RUNNER_TEMP/base-selector.py"
+          git show "$EVENT_BASE_SHA:validation-map.json" > "$RUNNER_TEMP/base-map.json"
+          python "$RUNNER_TEMP/base-selector.py" \
             --repo-root . \
+            --map "$RUNNER_TEMP/base-map.json" \
             --base "$EVENT_BASE_SHA" \
             --head "$EVENT_HEAD_SHA" \
             --github-output "$GITHUB_OUTPUT"
@@ -56,7 +59,7 @@ jobs:
           version: 10
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "22"
+          node-version: "24.9.0"
           cache: pnpm
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
@@ -65,15 +68,42 @@ jobs:
       - name: Install isolated host fixture
         working-directory: tests/fixtures/host-composition
         run: pnpm install --frozen-lockfile
+      - name: Install locked profile resolution SDK fixture
+        if: contains(needs.classify.outputs.gates, 'desktop_profile_tests') || contains(needs.classify.outputs.gates, 'full_candidate')
+        run: pnpm --dir tests/fixtures/profile-resolution-rc3 install --ignore-workspace --frozen-lockfile --ignore-scripts
       - name: Run repository-owned selected gates
         env:
           VALIDATION_PLAN: ${{ needs.classify.outputs.plan }}
         run: python scripts/run_selected_validation.py --plan-json "$VALIDATION_PLAN" --repo-root .
 
+  desktop_macos:
+    needs: classify
+    if: contains(needs.classify.outputs.gates, 'desktop_profile_tests') || contains(needs.classify.outputs.gates, 'native_fixture_tests') || contains(needs.classify.outputs.gates, 'full_candidate')
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      runner: macos-latest
+      node-version: "24.9.0"
+      full_suite: false
+      force_full: false
+      checkout_ref: ${{ github.event.pull_request.head.sha }}
+      validation_plan: ${{ needs.classify.outputs.plan }}
+
+  desktop_windows:
+    needs: classify
+    if: contains(needs.classify.outputs.gates, 'desktop_profile_tests') || contains(needs.classify.outputs.gates, 'native_fixture_tests') || contains(needs.classify.outputs.gates, 'full_candidate')
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      runner: windows-latest
+      node-version: "24.9.0"
+      full_suite: false
+      force_full: false
+      checkout_ref: ${{ github.event.pull_request.head.sha }}
+      validation_plan: ${{ needs.classify.outputs.plan }}
+
   required:
     name: PR validation required
     if: always()
-    needs: [classify, selected_validation]
+    needs: [classify, selected_validation, desktop_macos, desktop_windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -81,8 +111,15 @@ jobs:
         env:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           VALIDATION_RESULT: ${{ needs.selected_validation.result }}
+          DESKTOP_MACOS_RESULT: ${{ needs.desktop_macos.result }}
+          DESKTOP_WINDOWS_RESULT: ${{ needs.desktop_windows.result }}
+          DESKTOP_REQUIRED: ${{ contains(needs.classify.outputs.gates, 'desktop_profile_tests') || contains(needs.classify.outputs.gates, 'native_fixture_tests') || contains(needs.classify.outputs.gates, 'full_candidate') }}
         run: |
           set -euo pipefail
-          printf '%s\n' '["classify","selected_validation"]' > "$RUNNER_TEMP/required.json"
-          printf '{"classify":"%s","selected_validation":"%s"}\n' "$CLASSIFY_RESULT" "$VALIDATION_RESULT" > "$RUNNER_TEMP/observed.json"
+          if [[ "$DESKTOP_REQUIRED" == "true" ]]; then
+            printf '%s\n' '["classify","selected_validation","desktop_macos","desktop_windows"]' > "$RUNNER_TEMP/required.json"
+          else
+            printf '%s\n' '["classify","selected_validation"]' > "$RUNNER_TEMP/required.json"
+          fi
+          printf '{"classify":"%s","selected_validation":"%s","desktop_macos":"%s","desktop_windows":"%s"}\n' "$CLASSIFY_RESULT" "$VALIDATION_RESULT" "$DESKTOP_MACOS_RESULT" "$DESKTOP_WINDOWS_RESULT" > "$RUNNER_TEMP/observed.json"
           python scripts/verify_required_jobs.py --required "$RUNNER_TEMP/required.json" --observed "$RUNNER_TEMP/observed.json"

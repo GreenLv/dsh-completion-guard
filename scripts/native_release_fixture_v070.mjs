@@ -49,11 +49,13 @@ function fixturePackage(root) {
 }
 
 export async function runNativeReleaseFixture(config) {
+  config.onPhase?.('load_start')
   const require = runtimeRequire(config.runtimeRoot)
   const { Session, SessionId, SESSION_FORMAT_VERSION } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-session')).href)
   const { createUserMessage, createToolResultMessage, createAssistantMessage } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href)
   const product = await import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'index.js')).href)
   const domain = await import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'domain', 'index.js')).href)
+  config.onPhase?.('execute_start')
   const root = join(config.workRoot, `native-release-${config.nonce}`)
   mkdirSync(root, { recursive: true })
   const tgz = fixturePackage(root)

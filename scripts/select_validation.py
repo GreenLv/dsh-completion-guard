@@ -24,6 +24,19 @@ IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 # path. Committed build output is eligible only alongside its reviewed source.
 PORTABLE_SOURCE = {"src/domain/parse-cache.ts"}
 PORTABLE_TESTS = {"tests/v083-parse-cache.test.ts"}
+DESKTOP_TOOL_PATHS = {
+    'scripts/native_desktop_acceptance.py', 'scripts/native_desktop_market_acceptance.py',
+    'scripts/native_desktop_tools.mjs', 'scripts/native_profile_preservation.mjs',
+    'tests/native_profile_preservation.node.mjs',
+    'tests/fixtures/profile-resolution-rc3/package.json',
+    'tests/fixtures/profile-resolution-rc3/pnpm-lock.yaml',
+    'tests/fixtures/profile-resolution-rc3/.npmrc',
+}
+VALIDATION_CONTROL_PATHS = {
+    'validation-map.json', 'scripts/select_validation.py', 'scripts/run_selected_validation.py',
+    'scripts/verify_required_jobs.py', 'tests/validation_selection_test.py',
+    'tests/selected_validation_test.py', 'tests/required_jobs_test.py', 'tests/workflow_contract_test.py',
+}
 DOCUMENT_NAMES = {"AGENTS.md", "README.md", "README.zh-CN.md", "CHANGELOG.md",
                   "CHANGELOG.zh-CN.md", "LICENSE"}
 MATRIX_HIGH_RISK_RULES = {
@@ -73,8 +86,8 @@ def load_map(path: Path) -> tuple[dict[str, Any], str]:
         raise SelectionError("validation map must contain schema, full_gate, default, and rules")
     if value["schema"] != MAP_SCHEMA:
         raise SelectionError(f"validation map schema must be {MAP_SCHEMA}")
-    if not isinstance(value["full_gate"], str) or not IDENTIFIER.fullmatch(value["full_gate"]):
-        raise SelectionError("full_gate must be a valid ID")
+    if value["full_gate"] != 'full_candidate':
+        raise SelectionError('full_gate must be full_candidate')
     default = value["default"]
     if not isinstance(default, dict) or set(default) != {"gates", "invalidates"}:
         raise SelectionError("validation map default is invalid")
@@ -121,6 +134,16 @@ def changed_paths(root: Path, base: str, head: str) -> list[str]:
     return sorted({safe_path(line, "changed path") for line in result.stdout.splitlines() if line})
 
 
+def deleted_paths(root: Path, base: str, head: str) -> list[str]:
+    if not HEX40.fullmatch(base) or not HEX40.fullmatch(head):
+        raise SelectionError('base and head must be full lowercase Git SHA-1 values')
+    result = subprocess.run(['git', '-C', str(root), 'diff', '--name-only', '--no-renames',
+                             '--diff-filter=D', base, head, '--'], text=True, capture_output=True, check=False)
+    if result.returncode:
+        raise SelectionError(result.stderr.strip() or 'git command failed')
+    return sorted({safe_path(line, 'deleted path') for line in result.stdout.splitlines() if line})
+
+
 def classify(mapping: dict[str, Any], paths: list[str], *, map_sha256: str, base: str | None, head: str | None) -> dict[str, Any]:
     for label, value in (("base", base), ("head", head)):
         if value is not None and not HEX40.fullmatch(value):
@@ -135,12 +158,25 @@ def classify(mapping: dict[str, Any], paths: list[str], *, map_sha256: str, base
     peer_gates: dict[str, set[str]] = {}
     unknown: list[str] = []
     for path in normalized:
+        if path.startswith('tests/fixtures/profile-resolution-rc3/') and path not in DESKTOP_TOOL_PATHS:
+            unknown.append(path)
+            gates.update(mapping['default']['gates'])
+            invalidates.update(mapping['default']['invalidates'])
+            continue
+        if path in VALIDATION_CONTROL_PATHS or fnmatch.fnmatchcase(path, '.github/workflows/ci*.yml') or path == '.github/workflows/validation-shadow.yml':
+            gates.add('full_candidate')
+            invalidates.add('candidate_matrix')
+            matched.add('validation_infrastructure')
         matches = [rule for rule in mapping["rules"] if any(fnmatch.fnmatchcase(path, pattern) for pattern in rule["paths"])]
         if not matches:
             unknown.append(path)
             gates.update(mapping["default"]["gates"])
             invalidates.update(mapping["default"]["invalidates"])
             continue
+        # The dedicated Node/Python group owns these tests; Vitest's generic
+        # related-test selection cannot execute node:test entrypoints.
+        if any(rule['id'] in {'desktop_profile_tooling', 'native_fixture_tests'} for rule in matches):
+            matches = [rule for rule in matches if rule['id'] != 'tests']
         for rule in matches:
             matched.add(rule["id"])
             gates.update(rule["gates"])
@@ -194,9 +230,22 @@ def full_portability_matrix(plan: dict[str, Any], root: Path | None = None) -> b
     if MATRIX_HIGH_RISK_RULES.intersection(plan["matched_rules"]):
         return True
     paths = set(plan["changed_paths"])
+    desktop_paths = paths.intersection(DESKTOP_TOOL_PATHS)
+    if desktop_paths:
+        head = plan.get('head_sha')
+        if root is None or not isinstance(head, str) or not HEX40.fullmatch(head):
+            return True
+        try:
+            for path in desktop_paths:
+                subprocess.run(['git', '-C', str(root), 'cat-file', '-e', f'{head}:{path}'],
+                               capture_output=True, check=True)
+        except (OSError, subprocess.SubprocessError):
+            return True
     if paths.intersection(PORTABLE_SOURCE | PORTABLE_TESTS) and not portable_changes_are_safe(root, plan, paths):
         return True
     for path in paths:
+        if path in DESKTOP_TOOL_PATHS and 'desktop_profile_tooling' in plan['matched_rules']:
+            continue
         if path in PORTABLE_SOURCE or path in PORTABLE_TESTS or path in DOCUMENT_NAMES:
             continue
         if path.startswith("docs/") or path.startswith("assets/"):
@@ -232,6 +281,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise SelectionError("provide --path or both --base and --head")
             paths = changed_paths(root, args.base, args.head)
         plan = classify(mapping, paths, map_sha256=map_sha256, base=args.base, head=args.head)
+        # A deletion or rename can remove an owning check. Do not permit a
+        # candidate map to silently turn that change into a narrow plan.
+        if args.base and args.head and deleted_paths(root, args.base, args.head):
+            plan['gates'] = sorted(set(plan['gates']) | {mapping['full_gate']})
+            plan['invalidates'] = sorted(set(plan['invalidates']) | set(mapping['default']['invalidates']))
+            plan['full_required'] = True
         if args.github_output:
             write_github_outputs(args.github_output, plan, root)
         print(json.dumps(plan, indent=2, sort_keys=True))

@@ -422,18 +422,50 @@
       "peer_gates": {}
     },
     {
-      "id": "native_acceptance_infrastructure",
+      "id": "desktop_profile_tooling",
       "paths": [
-        "scripts/native_acceptance.py",
-        "scripts/native_host_acceptance.py",
         "scripts/native_desktop_acceptance.py",
         "scripts/native_desktop_market_acceptance.py",
         "scripts/native_desktop_tools.mjs",
         "scripts/native_profile_preservation.mjs",
         "tests/native_profile_preservation.node.mjs",
+        "tests/fixtures/profile-resolution-rc3/package.json",
+        "tests/fixtures/profile-resolution-rc3/pnpm-lock.yaml",
+        "tests/fixtures/profile-resolution-rc3/.npmrc"
+      ],
+      "gates": [
+        "desktop_profile_tests"
+      ],
+      "invalidates": [
+        "desktop_native"
+      ],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "native_fixture_tests",
+      "paths": [
+        "tests/module-eol.test.ts",
+        "tests/native-release-fixture.test.ts",
+        "tests/native-release-worker.mjs",
+        "scripts/native_release_fixture_v070.mjs"
+      ],
+      "gates": [
+        "native_fixture_tests"
+      ],
+      "invalidates": [],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "native_acceptance_infrastructure",
+      "paths": [
+        "scripts/native_acceptance.py",
+        "scripts/native_host_acceptance.py",
         "scripts/native_host_probe.mjs",
         "scripts/native_host_probe_v070.mjs",
         "scripts/native_release_fixture_v070.mjs",
+        "tests/native-release-worker.mjs",
         "scripts/native_incident_fixture_v070.mjs",
         "scripts/native_upgrade_fixture_v131.mjs",
         "tests/fixtures/upgrade/legacy-0.13.0-activation.json",

@@ -1,8 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { captureOfficialResolution, checkControlPlacement, classifyWorkspaceCache, compareGuardConfiguration,
@@ -12,6 +13,22 @@ import { captureOfficialResolution, checkControlPlacement, classifyWorkspaceCach
 const key = Buffer.alloc(32, 7)
 const begin = '# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>'
 const end = '# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<'
+
+async function officialBoot() {
+  const fixture = fileURLToPath(new URL('./fixtures/profile-resolution-rc3/', import.meta.url))
+  const require = createRequire(join(fixture, 'package.json'))
+  const bootPath = realpathSync(require.resolve('@deepseek-ai/dsh-app-boot'))
+  const fixtureModules = realpathSync(join(fixture, 'node_modules'))
+  const child = relative(fixtureModules, bootPath)
+  assert.ok(child && child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child), 'SDK must resolve inside the locked fixture')
+  const metadata = JSON.parse(readFileSync(join(dirname(dirname(bootPath)), 'package.json'), 'utf8'))
+  assert.equal(metadata.name, '@deepseek-ai/dsh-app-boot')
+  assert.equal(metadata.version, '0.2.2-rc.3')
+  const boot = await import(pathToFileURL(bootPath).href)
+  assert.equal(typeof boot.readProfileManifest, 'function')
+  assert.equal(typeof boot.createRuntimeResolution, 'function')
+  return { boot, bootPath }
+}
 
 test('entry positions keep structural identities but redact configuration keys and scalars', () => {
   const rows = [{ id: 'group', group: true, config: [{ id: 'plugin', name: '@x/plugin', config: {
@@ -58,13 +75,8 @@ test('resolution observations bind profile and carrier and reject altered receip
   assert.equal(JSON.stringify(signed).includes('/actual/profile'), false)
 })
 
-test('real SDK ignores only Guard direct-link upgrade and detects other link drift', async t => {
-  const pnpm = new URL('../node_modules/.pnpm/', import.meta.url)
-  let candidates
-  try { candidates = readdirSync(pnpm).filter(name => name.startsWith('@deepseek-ai+dsh-app-boot@0.2.2-rc.3_')) } catch { candidates = [] }
-  if (candidates.length !== 1) return t.skip('matching installed SDK unavailable')
-  const bootPath = fileURLToPath(new URL(`${candidates[0]}/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js`, pnpm))
-  const boot = await import(pathToFileURL(bootPath).href)
+test('real SDK ignores only Guard direct-link upgrade and detects other link drift', async () => {
+  const { boot, bootPath } = await officialBoot()
   const root = mkdtempSync(join(tmpdir(), 'dsh-real-link-'))
   try {
     const home = join(root, 'home'), profile = join(home, 'profiles', 'headless'), app = join(root, 'app'), modules = join(profile, 'node_modules')
@@ -78,10 +90,7 @@ test('real SDK ignores only Guard direct-link upgrade and detects other link dri
     writeFileSync(join(profile, 'package.json'), JSON.stringify({ name: 'fixture', dependencies: { 'dsh-completion-guard': '0.13.1', other: '1' }, dsh: { profile: { bundles: [] } } }))
     const guardLink = join(modules, 'dsh-completion-guard'), otherLink = join(modules, 'other')
     const link = (source, target) => symlinkSync(source, target, process.platform === 'win32' ? 'junction' : 'dir')
-    try { link(oldGuard, guardLink); link(oldOther, otherLink) } catch (error) {
-      if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) return t.skip('directory link capability unavailable')
-      throw error
-    }
+    link(oldGuard, guardLink); link(oldOther, otherLink)
     const args = { boot, anchor, profile, home, carrier: { executable: process.execPath, bootModule: bootPath, driver: bootPath, modules: [] } }
     const before = await captureOfficialResolution(args, key)
     unlinkSync(guardLink); link(newGuard, guardLink)
@@ -91,13 +100,8 @@ test('real SDK ignores only Guard direct-link upgrade and detects other link dri
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-test('existing official SDK resolves a synthetic original profile before and after change', async t => {
-  const pnpm = new URL('../node_modules/.pnpm/', import.meta.url)
-  let candidates
-  try { candidates = readdirSync(pnpm).filter(name => name.startsWith('@deepseek-ai+dsh-app-boot@0.2.2-rc.3_')) } catch { candidates = [] }
-  if (candidates.length !== 1) return t.skip('matching installed SDK unavailable')
-  const bootPath = fileURLToPath(new URL(`${candidates[0]}/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js`, pnpm))
-  const boot = await import(pathToFileURL(bootPath).href)
+test('existing official SDK resolves a synthetic original profile before and after change', async () => {
+  const { boot, bootPath } = await officialBoot()
   const root = mkdtempSync(join(tmpdir(), 'dsh-real-resolver-'))
   try {
     const home = join(root, 'home'), profile = join(home, 'profiles', 'headless'), app = join(root, 'app'), dep = join(profile, 'node_modules', 'fixture-dep'), bundle = join(profile, 'node_modules', 'fixture-bundle'), direct = join(profile, 'node_modules', 'direct-non-guard')

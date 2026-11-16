@@ -44,6 +44,13 @@ change the installed plugin runtime or grant release authority.
   manual dispatch always requests the full matrix. Static, package, build and
   documentation contracts run once outside those lanes. Each selected lane is
   required; a tag does not rerun the matrix.
+- The separately mapped Desktop profile tooling group runs its Node and Python
+  owning checks using the locked rc.3 SDK fixture on Linux, macOS, and Windows.
+  It invalidates Desktop driver evidence, not by itself portable artifact
+  acceptance. Unknown changes, deletions, shared contracts, and changes to
+  the selector, map, or workflow itself retain full candidate validation.
+  PR and main use the same selection and required outcomes; a fixture or native
+  link prerequisite missing on a selected lane is a failure, not a skip.
 - Use GitHub candidate CI as the portability screen before spending a
   native-platform slot. CI never substitutes for native Web,
   Headless, shell-shim, restart, credential, or application acceptance.
