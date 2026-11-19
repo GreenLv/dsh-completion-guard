@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
   "renderer_version": 4,
-  "generated_at": "2026-11-18T13:21:35.661Z",
-  "data_through": "2026-11-16",
+  "generated_at": "2026-11-19T13:47:06.635Z",
+  "data_through": "2026-11-17",
   "period": {
     "start": "2026-08-26",
-    "end": "2026-11-16"
+    "end": "2026-11-17"
   },
   "title": "dsh-completion-guard npm download history",
   "project": "dsh-completion-guard",
@@ -19,7 +19,7 @@
       "label": "dsh-context-guard (previous name)",
       "color": "#f59e0b",
       "start": "2026-08-26",
-      "total": 1249,
+      "total": 1264,
       "downloads": [
         {
           "day": "2026-08-26",
@@ -83,358 +83,363 @@
         },
         {
           "day": "2026-09-07",
-          "downloads": 0,
-          "cumulative": 938
+          "downloads": 11,
+          "cumulative": 949
         },
         {
           "day": "2026-09-08",
           "downloads": 0,
-          "cumulative": 938
+          "cumulative": 949
         },
         {
           "day": "2026-09-09",
           "downloads": 3,
-          "cumulative": 941
+          "cumulative": 952
         },
         {
           "day": "2026-09-10",
           "downloads": 7,
-          "cumulative": 948
+          "cumulative": 959
         },
         {
           "day": "2026-09-11",
           "downloads": 6,
-          "cumulative": 954
+          "cumulative": 965
         },
         {
           "day": "2026-09-12",
           "downloads": 3,
-          "cumulative": 957
+          "cumulative": 968
         },
         {
           "day": "2026-09-13",
           "downloads": 9,
-          "cumulative": 966
+          "cumulative": 977
         },
         {
           "day": "2026-09-14",
           "downloads": 0,
-          "cumulative": 966
+          "cumulative": 977
         },
         {
           "day": "2026-09-15",
           "downloads": 0,
-          "cumulative": 966
+          "cumulative": 977
         },
         {
           "day": "2026-09-16",
           "downloads": 3,
-          "cumulative": 969
+          "cumulative": 980
         },
         {
           "day": "2026-09-17",
           "downloads": 12,
-          "cumulative": 981
+          "cumulative": 992
         },
         {
           "day": "2026-09-18",
           "downloads": 1,
-          "cumulative": 982
+          "cumulative": 993
         },
         {
           "day": "2026-09-19",
           "downloads": 0,
-          "cumulative": 982
+          "cumulative": 993
         },
         {
           "day": "2026-09-20",
           "downloads": 6,
-          "cumulative": 988
+          "cumulative": 999
         },
         {
           "day": "2026-09-21",
           "downloads": 2,
-          "cumulative": 990
+          "cumulative": 1001
         },
         {
           "day": "2026-09-22",
           "downloads": 3,
-          "cumulative": 993
+          "cumulative": 1004
         },
         {
           "day": "2026-09-23",
           "downloads": 6,
-          "cumulative": 999
+          "cumulative": 1010
         },
         {
           "day": "2026-09-24",
           "downloads": 1,
-          "cumulative": 1000
+          "cumulative": 1011
         },
         {
           "day": "2026-09-25",
           "downloads": 0,
-          "cumulative": 1000
+          "cumulative": 1011
         },
         {
           "day": "2026-09-26",
           "downloads": 7,
-          "cumulative": 1007
+          "cumulative": 1018
         },
         {
           "day": "2026-09-27",
           "downloads": 10,
-          "cumulative": 1017
+          "cumulative": 1028
         },
         {
           "day": "2026-09-28",
           "downloads": 2,
-          "cumulative": 1019
+          "cumulative": 1030
         },
         {
           "day": "2026-09-29",
           "downloads": 4,
-          "cumulative": 1023
+          "cumulative": 1034
         },
         {
           "day": "2026-09-30",
           "downloads": 1,
-          "cumulative": 1024
+          "cumulative": 1035
         },
         {
           "day": "2026-10-01",
           "downloads": 1,
-          "cumulative": 1025
+          "cumulative": 1036
         },
         {
           "day": "2026-10-02",
           "downloads": 1,
-          "cumulative": 1026
+          "cumulative": 1037
         },
         {
           "day": "2026-10-03",
           "downloads": 3,
-          "cumulative": 1029
+          "cumulative": 1040
         },
         {
           "day": "2026-10-04",
           "downloads": 4,
-          "cumulative": 1033
+          "cumulative": 1044
         },
         {
           "day": "2026-10-05",
           "downloads": 2,
-          "cumulative": 1035
+          "cumulative": 1046
         },
         {
           "day": "2026-10-06",
           "downloads": 0,
-          "cumulative": 1035
+          "cumulative": 1046
         },
         {
           "day": "2026-10-07",
           "downloads": 0,
-          "cumulative": 1035
+          "cumulative": 1046
         },
         {
           "day": "2026-10-08",
           "downloads": 5,
-          "cumulative": 1040
+          "cumulative": 1051
         },
         {
           "day": "2026-10-09",
           "downloads": 1,
-          "cumulative": 1041
+          "cumulative": 1052
         },
         {
           "day": "2026-10-10",
           "downloads": 1,
-          "cumulative": 1042
+          "cumulative": 1053
         },
         {
           "day": "2026-10-11",
           "downloads": 1,
-          "cumulative": 1043
+          "cumulative": 1054
         },
         {
           "day": "2026-10-12",
           "downloads": 6,
-          "cumulative": 1049
+          "cumulative": 1060
         },
         {
           "day": "2026-10-13",
           "downloads": 6,
-          "cumulative": 1055
+          "cumulative": 1066
         },
         {
           "day": "2026-10-14",
           "downloads": 0,
-          "cumulative": 1055
+          "cumulative": 1066
         },
         {
           "day": "2026-10-15",
           "downloads": 0,
-          "cumulative": 1055
+          "cumulative": 1066
         },
         {
           "day": "2026-10-16",
           "downloads": 2,
-          "cumulative": 1057
+          "cumulative": 1068
         },
         {
           "day": "2026-10-17",
           "downloads": 7,
-          "cumulative": 1064
+          "cumulative": 1075
         },
         {
           "day": "2026-10-18",
           "downloads": 7,
-          "cumulative": 1071
+          "cumulative": 1082
         },
         {
           "day": "2026-10-19",
           "downloads": 0,
-          "cumulative": 1071
+          "cumulative": 1082
         },
         {
           "day": "2026-10-20",
           "downloads": 0,
-          "cumulative": 1071
+          "cumulative": 1082
         },
         {
           "day": "2026-10-21",
           "downloads": 8,
-          "cumulative": 1079
+          "cumulative": 1090
         },
         {
           "day": "2026-10-22",
           "downloads": 17,
-          "cumulative": 1096
+          "cumulative": 1107
         },
         {
           "day": "2026-10-23",
           "downloads": 10,
-          "cumulative": 1106
+          "cumulative": 1117
         },
         {
           "day": "2026-10-24",
           "downloads": 6,
-          "cumulative": 1112
+          "cumulative": 1123
         },
         {
           "day": "2026-10-25",
           "downloads": 12,
-          "cumulative": 1124
+          "cumulative": 1135
         },
         {
           "day": "2026-10-26",
           "downloads": 8,
-          "cumulative": 1132
+          "cumulative": 1143
         },
         {
           "day": "2026-10-27",
           "downloads": 3,
-          "cumulative": 1135
+          "cumulative": 1146
         },
         {
           "day": "2026-10-28",
           "downloads": 12,
-          "cumulative": 1147
+          "cumulative": 1158
         },
         {
           "day": "2026-10-29",
           "downloads": 9,
-          "cumulative": 1156
+          "cumulative": 1167
         },
         {
           "day": "2026-10-30",
           "downloads": 9,
-          "cumulative": 1165
+          "cumulative": 1176
         },
         {
           "day": "2026-10-31",
           "downloads": 5,
-          "cumulative": 1170
+          "cumulative": 1181
         },
         {
           "day": "2026-11-01",
           "downloads": 9,
-          "cumulative": 1179
+          "cumulative": 1190
         },
         {
           "day": "2026-11-02",
           "downloads": 7,
-          "cumulative": 1186
+          "cumulative": 1197
         },
         {
           "day": "2026-11-03",
           "downloads": 6,
-          "cumulative": 1192
+          "cumulative": 1203
         },
         {
           "day": "2026-11-04",
           "downloads": 14,
-          "cumulative": 1206
+          "cumulative": 1217
         },
         {
           "day": "2026-11-05",
           "downloads": 2,
-          "cumulative": 1208
+          "cumulative": 1219
         },
         {
           "day": "2026-11-06",
           "downloads": 6,
-          "cumulative": 1214
+          "cumulative": 1225
         },
         {
           "day": "2026-11-07",
           "downloads": 2,
-          "cumulative": 1216
+          "cumulative": 1227
         },
         {
           "day": "2026-11-08",
           "downloads": 2,
-          "cumulative": 1218
+          "cumulative": 1229
         },
         {
           "day": "2026-11-09",
           "downloads": 2,
-          "cumulative": 1220
+          "cumulative": 1231
         },
         {
           "day": "2026-11-10",
           "downloads": 4,
-          "cumulative": 1224
+          "cumulative": 1235
         },
         {
           "day": "2026-11-11",
           "downloads": 7,
-          "cumulative": 1231
+          "cumulative": 1242
         },
         {
           "day": "2026-11-12",
           "downloads": 5,
-          "cumulative": 1236
+          "cumulative": 1247
         },
         {
           "day": "2026-11-13",
           "downloads": 4,
-          "cumulative": 1240
+          "cumulative": 1251
         },
         {
           "day": "2026-11-14",
           "downloads": 3,
-          "cumulative": 1243
+          "cumulative": 1254
         },
         {
           "day": "2026-11-15",
           "downloads": 3,
-          "cumulative": 1246
+          "cumulative": 1257
         },
         {
           "day": "2026-11-16",
           "downloads": 3,
-          "cumulative": 1249
+          "cumulative": 1260
+        },
+        {
+          "day": "2026-11-17",
+          "downloads": 4,
+          "cumulative": 1264
         }
       ]
     },
@@ -443,7 +448,7 @@
       "label": "dsh-completion-guard",
       "color": "#2563eb",
       "start": "2026-08-29",
-      "total": 9679,
+      "total": 9927,
       "downloads": [
         {
           "day": "2026-08-29",
@@ -492,358 +497,363 @@
         },
         {
           "day": "2026-09-07",
-          "downloads": 0,
-          "cumulative": 1094
+          "downloads": 159,
+          "cumulative": 1253
         },
         {
           "day": "2026-09-08",
           "downloads": 0,
-          "cumulative": 1094
+          "cumulative": 1253
         },
         {
           "day": "2026-09-09",
           "downloads": 39,
-          "cumulative": 1133
+          "cumulative": 1292
         },
         {
           "day": "2026-09-10",
           "downloads": 190,
-          "cumulative": 1323
+          "cumulative": 1482
         },
         {
           "day": "2026-09-11",
           "downloads": 345,
-          "cumulative": 1668
+          "cumulative": 1827
         },
         {
           "day": "2026-09-12",
           "downloads": 49,
-          "cumulative": 1717
+          "cumulative": 1876
         },
         {
           "day": "2026-09-13",
           "downloads": 42,
-          "cumulative": 1759
+          "cumulative": 1918
         },
         {
           "day": "2026-09-14",
           "downloads": 333,
-          "cumulative": 2092
+          "cumulative": 2251
         },
         {
           "day": "2026-09-15",
           "downloads": 0,
-          "cumulative": 2092
+          "cumulative": 2251
         },
         {
           "day": "2026-09-16",
           "downloads": 180,
-          "cumulative": 2272
+          "cumulative": 2431
         },
         {
           "day": "2026-09-17",
           "downloads": 70,
-          "cumulative": 2342
+          "cumulative": 2501
         },
         {
           "day": "2026-09-18",
           "downloads": 238,
-          "cumulative": 2580
+          "cumulative": 2739
         },
         {
           "day": "2026-09-19",
           "downloads": 45,
-          "cumulative": 2625
+          "cumulative": 2784
         },
         {
           "day": "2026-09-20",
           "downloads": 40,
-          "cumulative": 2665
+          "cumulative": 2824
         },
         {
           "day": "2026-09-21",
           "downloads": 26,
-          "cumulative": 2691
+          "cumulative": 2850
         },
         {
           "day": "2026-09-22",
           "downloads": 329,
-          "cumulative": 3020
+          "cumulative": 3179
         },
         {
           "day": "2026-09-23",
           "downloads": 102,
-          "cumulative": 3122
+          "cumulative": 3281
         },
         {
           "day": "2026-09-24",
           "downloads": 31,
-          "cumulative": 3153
+          "cumulative": 3312
         },
         {
           "day": "2026-09-25",
           "downloads": 24,
-          "cumulative": 3177
+          "cumulative": 3336
         },
         {
           "day": "2026-09-26",
           "downloads": 64,
-          "cumulative": 3241
+          "cumulative": 3400
         },
         {
           "day": "2026-09-27",
           "downloads": 231,
-          "cumulative": 3472
+          "cumulative": 3631
         },
         {
           "day": "2026-09-28",
           "downloads": 70,
-          "cumulative": 3542
+          "cumulative": 3701
         },
         {
           "day": "2026-09-29",
           "downloads": 240,
-          "cumulative": 3782
+          "cumulative": 3941
         },
         {
           "day": "2026-09-30",
           "downloads": 117,
-          "cumulative": 3899
+          "cumulative": 4058
         },
         {
           "day": "2026-10-01",
           "downloads": 268,
-          "cumulative": 4167
+          "cumulative": 4326
         },
         {
           "day": "2026-10-02",
           "downloads": 246,
-          "cumulative": 4413
+          "cumulative": 4572
         },
         {
           "day": "2026-10-03",
           "downloads": 272,
-          "cumulative": 4685
+          "cumulative": 4844
         },
         {
           "day": "2026-10-04",
           "downloads": 109,
-          "cumulative": 4794
+          "cumulative": 4953
         },
         {
           "day": "2026-10-05",
           "downloads": 121,
-          "cumulative": 4915
+          "cumulative": 5074
         },
         {
           "day": "2026-10-06",
           "downloads": 0,
-          "cumulative": 4915
+          "cumulative": 5074
         },
         {
           "day": "2026-10-07",
           "downloads": 105,
-          "cumulative": 5020
+          "cumulative": 5179
         },
         {
           "day": "2026-10-08",
           "downloads": 105,
-          "cumulative": 5125
+          "cumulative": 5284
         },
         {
           "day": "2026-10-09",
           "downloads": 273,
-          "cumulative": 5398
+          "cumulative": 5557
         },
         {
           "day": "2026-10-10",
           "downloads": 123,
-          "cumulative": 5521
+          "cumulative": 5680
         },
         {
           "day": "2026-10-11",
           "downloads": 99,
-          "cumulative": 5620
+          "cumulative": 5779
         },
         {
           "day": "2026-10-12",
           "downloads": 101,
-          "cumulative": 5721
+          "cumulative": 5880
         },
         {
           "day": "2026-10-13",
           "downloads": 96,
-          "cumulative": 5817
+          "cumulative": 5976
         },
         {
           "day": "2026-10-14",
           "downloads": 0,
-          "cumulative": 5817
+          "cumulative": 5976
         },
         {
           "day": "2026-10-15",
           "downloads": 0,
-          "cumulative": 5817
+          "cumulative": 5976
         },
         {
           "day": "2026-10-16",
           "downloads": 61,
-          "cumulative": 5878
+          "cumulative": 6037
         },
         {
           "day": "2026-10-17",
           "downloads": 71,
-          "cumulative": 5949
+          "cumulative": 6108
         },
         {
           "day": "2026-10-18",
           "downloads": 264,
-          "cumulative": 6213
+          "cumulative": 6372
         },
         {
           "day": "2026-10-19",
           "downloads": 0,
-          "cumulative": 6213
+          "cumulative": 6372
         },
         {
           "day": "2026-10-20",
           "downloads": 0,
-          "cumulative": 6213
+          "cumulative": 6372
         },
         {
           "day": "2026-10-21",
           "downloads": 132,
-          "cumulative": 6345
+          "cumulative": 6504
         },
         {
           "day": "2026-10-22",
           "downloads": 101,
-          "cumulative": 6446
+          "cumulative": 6605
         },
         {
           "day": "2026-10-23",
           "downloads": 76,
-          "cumulative": 6522
+          "cumulative": 6681
         },
         {
           "day": "2026-10-24",
           "downloads": 81,
-          "cumulative": 6603
+          "cumulative": 6762
         },
         {
           "day": "2026-10-25",
           "downloads": 67,
-          "cumulative": 6670
+          "cumulative": 6829
         },
         {
           "day": "2026-10-26",
           "downloads": 85,
-          "cumulative": 6755
+          "cumulative": 6914
         },
         {
           "day": "2026-10-27",
           "downloads": 79,
-          "cumulative": 6834
+          "cumulative": 6993
         },
         {
           "day": "2026-10-28",
           "downloads": 81,
-          "cumulative": 6915
+          "cumulative": 7074
         },
         {
           "day": "2026-10-29",
           "downloads": 59,
-          "cumulative": 6974
+          "cumulative": 7133
         },
         {
           "day": "2026-10-30",
           "downloads": 67,
-          "cumulative": 7041
+          "cumulative": 7200
         },
         {
           "day": "2026-10-31",
           "downloads": 260,
-          "cumulative": 7301
+          "cumulative": 7460
         },
         {
           "day": "2026-11-01",
           "downloads": 93,
-          "cumulative": 7394
+          "cumulative": 7553
         },
         {
           "day": "2026-11-02",
           "downloads": 64,
-          "cumulative": 7458
+          "cumulative": 7617
         },
         {
           "day": "2026-11-03",
           "downloads": 422,
-          "cumulative": 7880
+          "cumulative": 8039
         },
         {
           "day": "2026-11-04",
           "downloads": 122,
-          "cumulative": 8002
+          "cumulative": 8161
         },
         {
           "day": "2026-11-05",
           "downloads": 91,
-          "cumulative": 8093
+          "cumulative": 8252
         },
         {
           "day": "2026-11-06",
           "downloads": 105,
-          "cumulative": 8198
+          "cumulative": 8357
         },
         {
           "day": "2026-11-07",
           "downloads": 272,
-          "cumulative": 8470
+          "cumulative": 8629
         },
         {
           "day": "2026-11-08",
           "downloads": 121,
-          "cumulative": 8591
+          "cumulative": 8750
         },
         {
           "day": "2026-11-09",
           "downloads": 81,
-          "cumulative": 8672
+          "cumulative": 8831
         },
         {
           "day": "2026-11-10",
           "downloads": 111,
-          "cumulative": 8783
+          "cumulative": 8942
         },
         {
           "day": "2026-11-11",
           "downloads": 81,
-          "cumulative": 8864
+          "cumulative": 9023
         },
         {
           "day": "2026-11-12",
           "downloads": 68,
-          "cumulative": 8932
+          "cumulative": 9091
         },
         {
           "day": "2026-11-13",
           "downloads": 216,
-          "cumulative": 9148
+          "cumulative": 9307
         },
         {
           "day": "2026-11-14",
           "downloads": 312,
-          "cumulative": 9460
+          "cumulative": 9619
         },
         {
           "day": "2026-11-15",
           "downloads": 129,
-          "cumulative": 9589
+          "cumulative": 9748
         },
         {
           "day": "2026-11-16",
           "downloads": 90,
-          "cumulative": 9679
+          "cumulative": 9838
+        },
+        {
+          "day": "2026-11-17",
+          "downloads": 89,
+          "cumulative": 9927
         }
       ]
     }
@@ -911,377 +921,382 @@
     },
     {
       "day": "2026-09-07",
-      "downloads": 0,
-      "cumulative": 2032
+      "downloads": 170,
+      "cumulative": 2202
     },
     {
       "day": "2026-09-08",
       "downloads": 0,
-      "cumulative": 2032
+      "cumulative": 2202
     },
     {
       "day": "2026-09-09",
       "downloads": 42,
-      "cumulative": 2074
+      "cumulative": 2244
     },
     {
       "day": "2026-09-10",
       "downloads": 197,
-      "cumulative": 2271
+      "cumulative": 2441
     },
     {
       "day": "2026-09-11",
       "downloads": 351,
-      "cumulative": 2622
+      "cumulative": 2792
     },
     {
       "day": "2026-09-12",
       "downloads": 52,
-      "cumulative": 2674
+      "cumulative": 2844
     },
     {
       "day": "2026-09-13",
       "downloads": 51,
-      "cumulative": 2725
+      "cumulative": 2895
     },
     {
       "day": "2026-09-14",
       "downloads": 333,
-      "cumulative": 3058
+      "cumulative": 3228
     },
     {
       "day": "2026-09-15",
       "downloads": 0,
-      "cumulative": 3058
+      "cumulative": 3228
     },
     {
       "day": "2026-09-16",
       "downloads": 183,
-      "cumulative": 3241
+      "cumulative": 3411
     },
     {
       "day": "2026-09-17",
       "downloads": 82,
-      "cumulative": 3323
+      "cumulative": 3493
     },
     {
       "day": "2026-09-18",
       "downloads": 239,
-      "cumulative": 3562
+      "cumulative": 3732
     },
     {
       "day": "2026-09-19",
       "downloads": 45,
-      "cumulative": 3607
+      "cumulative": 3777
     },
     {
       "day": "2026-09-20",
       "downloads": 46,
-      "cumulative": 3653
+      "cumulative": 3823
     },
     {
       "day": "2026-09-21",
       "downloads": 28,
-      "cumulative": 3681
+      "cumulative": 3851
     },
     {
       "day": "2026-09-22",
       "downloads": 332,
-      "cumulative": 4013
+      "cumulative": 4183
     },
     {
       "day": "2026-09-23",
       "downloads": 108,
-      "cumulative": 4121
+      "cumulative": 4291
     },
     {
       "day": "2026-09-24",
       "downloads": 32,
-      "cumulative": 4153
+      "cumulative": 4323
     },
     {
       "day": "2026-09-25",
       "downloads": 24,
-      "cumulative": 4177
+      "cumulative": 4347
     },
     {
       "day": "2026-09-26",
       "downloads": 71,
-      "cumulative": 4248
+      "cumulative": 4418
     },
     {
       "day": "2026-09-27",
       "downloads": 241,
-      "cumulative": 4489
+      "cumulative": 4659
     },
     {
       "day": "2026-09-28",
       "downloads": 72,
-      "cumulative": 4561
+      "cumulative": 4731
     },
     {
       "day": "2026-09-29",
       "downloads": 244,
-      "cumulative": 4805
+      "cumulative": 4975
     },
     {
       "day": "2026-09-30",
       "downloads": 118,
-      "cumulative": 4923
+      "cumulative": 5093
     },
     {
       "day": "2026-10-01",
       "downloads": 269,
-      "cumulative": 5192
+      "cumulative": 5362
     },
     {
       "day": "2026-10-02",
       "downloads": 247,
-      "cumulative": 5439
+      "cumulative": 5609
     },
     {
       "day": "2026-10-03",
       "downloads": 275,
-      "cumulative": 5714
+      "cumulative": 5884
     },
     {
       "day": "2026-10-04",
       "downloads": 113,
-      "cumulative": 5827
+      "cumulative": 5997
     },
     {
       "day": "2026-10-05",
       "downloads": 123,
-      "cumulative": 5950
+      "cumulative": 6120
     },
     {
       "day": "2026-10-06",
       "downloads": 0,
-      "cumulative": 5950
+      "cumulative": 6120
     },
     {
       "day": "2026-10-07",
       "downloads": 105,
-      "cumulative": 6055
+      "cumulative": 6225
     },
     {
       "day": "2026-10-08",
       "downloads": 110,
-      "cumulative": 6165
+      "cumulative": 6335
     },
     {
       "day": "2026-10-09",
       "downloads": 274,
-      "cumulative": 6439
+      "cumulative": 6609
     },
     {
       "day": "2026-10-10",
       "downloads": 124,
-      "cumulative": 6563
+      "cumulative": 6733
     },
     {
       "day": "2026-10-11",
       "downloads": 100,
-      "cumulative": 6663
+      "cumulative": 6833
     },
     {
       "day": "2026-10-12",
       "downloads": 107,
-      "cumulative": 6770
+      "cumulative": 6940
     },
     {
       "day": "2026-10-13",
       "downloads": 102,
-      "cumulative": 6872
+      "cumulative": 7042
     },
     {
       "day": "2026-10-14",
       "downloads": 0,
-      "cumulative": 6872
+      "cumulative": 7042
     },
     {
       "day": "2026-10-15",
       "downloads": 0,
-      "cumulative": 6872
+      "cumulative": 7042
     },
     {
       "day": "2026-10-16",
       "downloads": 63,
-      "cumulative": 6935
+      "cumulative": 7105
     },
     {
       "day": "2026-10-17",
       "downloads": 78,
-      "cumulative": 7013
+      "cumulative": 7183
     },
     {
       "day": "2026-10-18",
       "downloads": 271,
-      "cumulative": 7284
+      "cumulative": 7454
     },
     {
       "day": "2026-10-19",
       "downloads": 0,
-      "cumulative": 7284
+      "cumulative": 7454
     },
     {
       "day": "2026-10-20",
       "downloads": 0,
-      "cumulative": 7284
+      "cumulative": 7454
     },
     {
       "day": "2026-10-21",
       "downloads": 140,
-      "cumulative": 7424
+      "cumulative": 7594
     },
     {
       "day": "2026-10-22",
       "downloads": 118,
-      "cumulative": 7542
+      "cumulative": 7712
     },
     {
       "day": "2026-10-23",
       "downloads": 86,
-      "cumulative": 7628
+      "cumulative": 7798
     },
     {
       "day": "2026-10-24",
       "downloads": 87,
-      "cumulative": 7715
+      "cumulative": 7885
     },
     {
       "day": "2026-10-25",
       "downloads": 79,
-      "cumulative": 7794
+      "cumulative": 7964
     },
     {
       "day": "2026-10-26",
       "downloads": 93,
-      "cumulative": 7887
+      "cumulative": 8057
     },
     {
       "day": "2026-10-27",
       "downloads": 82,
-      "cumulative": 7969
+      "cumulative": 8139
     },
     {
       "day": "2026-10-28",
       "downloads": 93,
-      "cumulative": 8062
+      "cumulative": 8232
     },
     {
       "day": "2026-10-29",
       "downloads": 68,
-      "cumulative": 8130
+      "cumulative": 8300
     },
     {
       "day": "2026-10-30",
       "downloads": 76,
-      "cumulative": 8206
+      "cumulative": 8376
     },
     {
       "day": "2026-10-31",
       "downloads": 265,
-      "cumulative": 8471
+      "cumulative": 8641
     },
     {
       "day": "2026-11-01",
       "downloads": 102,
-      "cumulative": 8573
+      "cumulative": 8743
     },
     {
       "day": "2026-11-02",
       "downloads": 71,
-      "cumulative": 8644
+      "cumulative": 8814
     },
     {
       "day": "2026-11-03",
       "downloads": 428,
-      "cumulative": 9072
+      "cumulative": 9242
     },
     {
       "day": "2026-11-04",
       "downloads": 136,
-      "cumulative": 9208
+      "cumulative": 9378
     },
     {
       "day": "2026-11-05",
       "downloads": 93,
-      "cumulative": 9301
+      "cumulative": 9471
     },
     {
       "day": "2026-11-06",
       "downloads": 111,
-      "cumulative": 9412
+      "cumulative": 9582
     },
     {
       "day": "2026-11-07",
       "downloads": 274,
-      "cumulative": 9686
+      "cumulative": 9856
     },
     {
       "day": "2026-11-08",
       "downloads": 123,
-      "cumulative": 9809
+      "cumulative": 9979
     },
     {
       "day": "2026-11-09",
       "downloads": 83,
-      "cumulative": 9892
+      "cumulative": 10062
     },
     {
       "day": "2026-11-10",
       "downloads": 115,
-      "cumulative": 10007
+      "cumulative": 10177
     },
     {
       "day": "2026-11-11",
       "downloads": 88,
-      "cumulative": 10095
+      "cumulative": 10265
     },
     {
       "day": "2026-11-12",
       "downloads": 73,
-      "cumulative": 10168
+      "cumulative": 10338
     },
     {
       "day": "2026-11-13",
       "downloads": 220,
-      "cumulative": 10388
+      "cumulative": 10558
     },
     {
       "day": "2026-11-14",
       "downloads": 315,
-      "cumulative": 10703
+      "cumulative": 10873
     },
     {
       "day": "2026-11-15",
       "downloads": 132,
-      "cumulative": 10835
+      "cumulative": 11005
     },
     {
       "day": "2026-11-16",
       "downloads": 93,
-      "cumulative": 10928
+      "cumulative": 11098
+    },
+    {
+      "day": "2026-11-17",
+      "downloads": 93,
+      "cumulative": 11191
     }
   ],
   "sources": [
     {
       "package": "dsh-context-guard",
       "start": "2026-08-26",
-      "end": "2026-11-17",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-11-17/dsh-context-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-11-17/dsh-context-guard"
+      "end": "2026-11-18",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-11-18/dsh-context-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-11-18/dsh-context-guard"
     },
     {
       "package": "dsh-completion-guard",
       "start": "2026-08-29",
-      "end": "2026-11-17",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-11-17/dsh-completion-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-11-17/dsh-completion-guard"
+      "end": "2026-11-18",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-11-18/dsh-completion-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-11-18/dsh-completion-guard"
     }
   ],
-  "observation_through": "2026-11-17",
+  "observation_through": "2026-11-18",
   "settlement": {
     "mode": "observed-stable-days",
     "latest_day_status": "stable",
@@ -1291,7 +1306,7 @@
         "first_version": "0.1.0",
         "first_published_at": "2026-08-26T19:24:20.556Z",
         "first_public_day": "2026-08-26",
-        "available_through": "2026-11-17",
+        "available_through": "2026-11-18",
         "registry": "https://registry.npmjs.org/dsh-context-guard",
         "availability": "https://api.npmjs.org/downloads/point/last-day/dsh-context-guard"
       },
@@ -1300,12 +1315,12 @@
         "first_version": "0.2.1",
         "first_published_at": "2026-08-29T05:03:21.705Z",
         "first_public_day": "2026-08-29",
-        "available_through": "2026-11-17",
+        "available_through": "2026-11-18",
         "registry": "https://registry.npmjs.org/dsh-completion-guard",
         "availability": "https://api.npmjs.org/downloads/point/last-day/dsh-completion-guard"
       }
     ],
-    "stable_through": "2026-11-16",
+    "stable_through": "2026-11-17",
     "minimum_age_days": 2,
     "minimum_observation_span_hours": 12
   },
