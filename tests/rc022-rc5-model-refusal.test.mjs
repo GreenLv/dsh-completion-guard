@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { test } from 'vitest'
@@ -9,13 +9,13 @@ import * as domain from '../src/domain/index.js'
 
 // Exercise the locked rc.5 SDK graph and write only to a temporary session root.
 const runtime = process.cwd()
-const store = join(runtime, 'node_modules', '.pnpm')
-const entries = await readdir(store)
-async function sdk(name) {
-  const matches = entries.filter(entry => entry.startsWith(`@deepseek-ai+${name}@0.2.2-rc.5`))
-  assert.equal(matches.length, 1, `${name} has an ambiguous SDK identity`)
-  const path = join(store, matches[0], 'node_modules', '@deepseek-ai', name, 'lib', 'index.js')
-  return import(pathToFileURL(path).href)
+const requireFromRoot = createRequire(join(runtime, 'package.json'))
+async function sdk(name, requireFrom = requireFromRoot) {
+  const specifier = `@deepseek-ai/${name}`
+  const manifest = requireFrom(`${specifier}/package.json`)
+  assert.equal(manifest.name, specifier, `${name} package identity differs`)
+  assert.equal(manifest.version, '0.2.2-rc.5', `${name} package version differs`)
+  return import(pathToFileURL(requireFrom.resolve(specifier)).href)
 }
 const agentLoop = await sdk('dsh-agent-loop')
 const adapter = await sdk('dsh-llm-deepseek')
@@ -27,9 +27,19 @@ const agents = await sdk('dsh-agent')
 const prompt = await sdk('dsh-system-prompt')
 const tools = await sdk('dsh-tools')
 const executor = await sdk('dsh-tool-executor-native')
-const agentLoopDir = entries.find(entry => entry.startsWith('@deepseek-ai+dsh-agent-loop@0.2.2-rc.5'))
-const requireFromLoop = createRequire(join(store, agentLoopDir, 'node_modules', '@deepseek-ai', 'dsh-agent-loop', 'package.json'))
+const requireFromLoop = createRequire(requireFromRoot.resolve('@deepseek-ai/dsh-agent-loop'))
 const { Context } = await import(pathToFileURL(requireFromLoop.resolve('@deepseek-ai/cordis')).href)
+
+test('rejects an SDK package whose resolved manifest is a different version', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dcg-sdk-version-'))
+  try {
+    const packageRoot = join(root, 'node_modules', '@deepseek-ai', 'dsh-agent-loop')
+    await mkdir(packageRoot, { recursive: true })
+    await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-agent-loop', version: '0.2.2-rc.3', main: './index.js' }))
+    await writeFile(join(packageRoot, 'index.js'), 'export const fixture = true\n')
+    await assert.rejects(sdk('dsh-agent-loop', createRequire(join(root, 'package.json'))), /package version differs/)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
 
 const model = 'deepseek-v4-flash'
 function events(reason) {
