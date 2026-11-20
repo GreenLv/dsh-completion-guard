@@ -25,7 +25,7 @@ Guard reviews DSH `0.2.2-rc.5` as its default host graph and retains the reviewe
 
 Guard requires DSH `>=0.2.2-rc.3`, Node.js `>=24.9.0`, and qualified Cordis `>=4.1.0`. Preserve old packages and verified mode sources before replacing either package, then rebuild and verify the host lock for each profile. Follow the [installation](docs/GETTING_STARTED.md), [host-lock](docs/HOST_LOCK_UPGRADE.md) and [migration](docs/ACTIVATION_MIGRATION.md) guides.
 
-DSH rc.5 carries Undici 8.11.2. See [dependency advisories](docs/DEPENDENCY_SCAN.md) for the recorded risks and candidate status, and [acceptance](docs/LOCAL_ACCEPTANCE.md) for the remaining checks.
+The signed DSH rc.5 host still carries Undici 8.11.2. The existing three [dependency exceptions](docs/DEPENDENCY_SCAN.md) apply to 0.13.3 through **2026-11-30 inclusive**. Historical case `archive-045` remains unverified under a 0.13.3-only exception. See the [acceptance record](docs/LOCAL_ACCEPTANCE.md).
 
 ## 0.13.2
 

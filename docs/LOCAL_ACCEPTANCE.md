@@ -9,6 +9,10 @@ The minimum host remains `0.2.2-rc.3`; rc.5 is the default reviewed graph. The c
 
 最低宿主仍为 `0.2.2-rc.3`，rc.5 为默认审查包图。候选先通过完整适用历史错误库，再进入正式验收。CI 绑定最终提交，macOS arm64 和 Windows x64 的 Web、Headless、官方 Desktop 使用同一冻结包，覆盖 0.13.2 前驱、普通和 zstd 持久化、拒绝控制、清理及 Desktop v2 两层 no-op。registry 身份、源码资格、原生运行和实际加载分别记录。
 
+The maintainer has authorized a 0.13.3-only exception for `archive-045` because the original diagnostic input and rejection chain are unavailable. The inventory keeps the case as unverified. It contributes no passing result. All other applicable cases remain required. The three temporary Undici exceptions and their expiry are recorded in [Dependency advisory gate](DEPENDENCY_SCAN.md).
+
+`archive-045` 缺少原始诊断输入和拒绝链。维护者仅为 0.13.3 批准单案例外，清单保留该案为未验证，通过数不含本案。其他适用案例仍须通过。三项 Undici 临时例外及期限见[依赖告警门禁](DEPENDENCY_SCAN.md)。
+
 ## 0.13.2 / DSH 0.2.2-rc.3 candidate contract
 
 The minimum host is DSH `0.2.2-rc.3`; rc.2 is an upgrade source and a refusal control. Bind candidate CI to the exact source commit and run the required macOS arm64 and Windows x64 Web, Headless and official Desktop acceptance on the same frozen package. Verify the 0.13.1 to 0.13.2 predecessor lifecycle and rc.2 to rc.3 transition with the preserved predecessor fixture, including both compression modes and refusal controls. Portable tests and source qualification do not prove native loading or artifact acceptance.

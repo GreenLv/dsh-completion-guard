@@ -25,7 +25,7 @@ Guard 将 DSH `0.2.2-rc.5` 作为默认审查包图，并保留已审查的 rc.3
 
 Guard 要求 DSH `>=0.2.2-rc.3`、Node.js `>=24.9.0` 和已核验的 Cordis `>=4.1.0`。替换任一安装包前，保存旧包和已核验的模式来源，再为每个配置重建并核验宿主锁。具体步骤见[安装指南](docs/GETTING_STARTED.md)、[宿主锁指南](docs/HOST_LOCK_UPGRADE.md)和[迁移指南](docs/ACTIVATION_MIGRATION.md)。
 
-DSH rc.5 携带 Undici 8.11.2。已记录的风险和候选状态见[依赖风险说明](docs/DEPENDENCY_SCAN.md)，剩余检查见[验收记录](docs/LOCAL_ACCEPTANCE.md)。
+签名 DSH rc.5 宿主仍携带 Undici 8.11.2。0.13.3 沿用既有三项[依赖例外](docs/DEPENDENCY_SCAN.md)，期限截至 **2026-11-30（含）**。历史案 `archive-045` 按本版单案例外保留为未验证，详见[验收记录](docs/LOCAL_ACCEPTANCE.md)。
 
 ## 0.13.2
 

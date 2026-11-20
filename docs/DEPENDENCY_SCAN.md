@@ -8,9 +8,9 @@ required CI job `dependency-scan`). This page is the maintenance contract for th
 
 ## 0.13.3 candidate / 0.13.3 候选
 
-The rc.5 dependency graph still includes `undici@8.11.2`. The previously approved exceptions identify Guard 0.13.2 and earlier versions and end on 2026-11-30 inclusive. The 0.13.3 candidate must pass its own dependency scan and resolve any blocking findings before publication.
+The signed rc.5 host still includes `undici@8.11.2`. On 2026-11-20 the maintainer accepted the existing three interim exceptions (1243472, 1243474, 1243477) for Guard 0.13.3 through **2026-11-30 inclusive**. The scan continues to block other unaccepted high or critical findings.
 
-rc.5 依赖图仍包含 `undici@8.11.2`。此前已批准的例外适用于 Guard 0.13.2 及更早版本，期限截至 2026-11-30（含）。0.13.3 候选须完成本版依赖扫描并在发版前处理阻断项。
+签名 rc.5 宿主仍包含 `undici@8.11.2`。维护者于 2026-11-20 批准 Guard 0.13.3 沿用既有三项临时例外（1243472、1243474、1243477），期限截至 **2026-11-30（含）**。其他未经接受的高危或严重发现仍阻断门禁。
 
 ## Policy / 策略
 
