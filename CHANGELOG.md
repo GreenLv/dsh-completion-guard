@@ -7,9 +7,25 @@ Each entry describes what changed in that version and what users needed to do wh
 <details>
 <summary>Version index</summary>
 
-[0.13.2](#0132) · [0.13.1](#0131) · [0.13.0](#0130) · [0.12.1](#0121) · [0.12.0](#0120) · [0.11.0](#0110) · [0.10.0](#0100) · [0.9.0](#090) · [0.8.4](#084) · [0.8.3](#083) · [0.8.2](#082) · [0.8.1](#081) · [0.8.0](#080) · [0.7.1](#071---2026-09-22) · [0.7.0](#070---2026-09-21) · [0.6.3](#063---2026-09-18) · [0.6.2](#062---2026-09-16) · [0.6.1](#061-2026-09-15) · [0.6.0](#060---2026-09-14) · [0.5.3](#053---2026-09-14) · [0.5.2](#052---2026-09-11) · [0.5.1](#051---2026-09-10) · [0.5.0](#050---2026-09-10) · [0.4.3](#043---2026-09-08) · [0.4.2](#042---2026-09-07) · [0.4.1-rc.1](#041-rc1---2026-09-04) · [0.4.0](#040---2026-09-02) · [0.3.2](#032---2026-09-01) · [0.3.1](#031---2026-08-31) · [0.3.0](#030---2026-08-31) · [0.2.1](#021---2026-08-28) · [0.2.0](#020---2026-08-28) · [0.1.2](#012---2026-08-27) · [0.1.1](#011---2026-08-27) · [0.1.0](#010---2026-08-27)
+[0.13.3](#0133) · [0.13.2](#0132) · [0.13.1](#0131) · [0.13.0](#0130) · [0.12.1](#0121) · [0.12.0](#0120) · [0.11.0](#0110) · [0.10.0](#0100) · [0.9.0](#090) · [0.8.4](#084) · [0.8.3](#083) · [0.8.2](#082) · [0.8.1](#081) · [0.8.0](#080) · [0.7.1](#071---2026-09-22) · [0.7.0](#070---2026-09-21) · [0.6.3](#063---2026-09-18) · [0.6.2](#062---2026-09-16) · [0.6.1](#061-2026-09-15) · [0.6.0](#060---2026-09-14) · [0.5.3](#053---2026-09-14) · [0.5.2](#052---2026-09-11) · [0.5.1](#051---2026-09-10) · [0.5.0](#050---2026-09-10) · [0.4.3](#043---2026-09-08) · [0.4.2](#042---2026-09-07) · [0.4.1-rc.1](#041-rc1---2026-09-04) · [0.4.0](#040---2026-09-02) · [0.3.2](#032---2026-09-01) · [0.3.1](#031---2026-08-31) · [0.3.0](#030---2026-08-31) · [0.2.1](#021---2026-08-28) · [0.2.0](#020---2026-08-28) · [0.1.2](#012---2026-08-27) · [0.1.1](#011---2026-08-27) · [0.1.0](#010---2026-08-27)
 
 </details>
+
+## 0.13.3
+
+### Changes
+
+Guard reviews DSH `0.2.2-rc.5` as its default host graph and retains the reviewed rc.3 graph.
+
+- **Rebind newer hosts with bounded verification.** Registry acquisition checks each consumed dependency's actual importer route and refuses conflicting identities. Larger valid graphs can pass within the revised package, edge, byte and time limits.
+- **Check both Desktop distributions.** The macOS arm64 and Windows x64 identities bind the official signed carriers and their application archives. Platform execution and installation remain separate checks.
+- **Keep previous session modes.** The upgrade tool accepts a verified Guard 0.13.2 mode source. It preserves valid existing bindings and keeps missing, damaged and incomplete ones pending.
+
+### Upgrading
+
+Guard requires DSH `>=0.2.2-rc.3`, Node.js `>=24.9.0`, and qualified Cordis `>=4.1.0`. Preserve old packages and verified mode sources before replacing either package, then rebuild and verify the host lock for each profile. Follow the [installation](docs/GETTING_STARTED.md), [host-lock](docs/HOST_LOCK_UPGRADE.md) and [migration](docs/ACTIVATION_MIGRATION.md) guides.
+
+DSH rc.5 carries Undici 8.11.2. See [dependency advisories](docs/DEPENDENCY_SCAN.md) for the recorded risks and candidate status, and [acceptance](docs/LOCAL_ACCEPTANCE.md) for the remaining checks.
 
 ## 0.13.2
 

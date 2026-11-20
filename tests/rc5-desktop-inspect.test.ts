@@ -61,6 +61,18 @@ vi.mock('../src/domain/rc022-rc3-byte-audit-manifest.js', async (original) => {
     },
   })) } }
 })
+vi.mock('../src/domain/rc022-rc5-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map((row) => ({
+    ...row,
+    modules: {
+      'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, type: 'module', main: 'lib/index.js' }) + '\n', 'utf8').digest('hex'),
+      'lib/index.js': libDigest,
+    },
+  })) } }
+})
 vi.mock('../src/domain/rc022-rc2-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')

@@ -78,6 +78,10 @@ def check(args: argparse.Namespace) -> dict:
               "driver_sha256": None, "stage": "initial", "failure_type": None,
               "acceptance_executed": False}
     try:
+        result["stage"] = "host_cohort"
+        selected = "dsh-0.2.2-rc.5-core-v1"
+        if args.web_cohort != selected or args.headless_cohort != selected:
+            raise ValueError("warm-scope driver requires the rc.5 cohort")
         result["stage"] = "identity"
         if not re.fullmatch(r"[0-9a-f]{40}", args.source_commit) or not re.fullmatch(r"[0-9a-f]{64}", args.artifact_sha256):
             raise ValueError("invalid expected identity")
@@ -138,7 +142,7 @@ def argument_parser() -> argparse.ArgumentParser:
     p.add_argument("--repo-root",type=Path,required=True); p.add_argument("--runtime-root",type=Path,required=True)
     p.add_argument("--artifact",type=Path,required=True); p.add_argument("--artifact-sha256",required=True)
     p.add_argument("--source-commit",required=True); p.add_argument("--output",type=Path,required=True)
-    p.add_argument("--web-cohort",default="dsh-0.2.2-rc.3-core-v1"); p.add_argument("--headless-cohort",default="dsh-0.2.2-rc.3-core-v1")
+    p.add_argument("--web-cohort",default="dsh-0.2.2-rc.5-core-v1"); p.add_argument("--headless-cohort",default="dsh-0.2.2-rc.5-core-v1")
     return p
 
 def main(argv=None) -> int:

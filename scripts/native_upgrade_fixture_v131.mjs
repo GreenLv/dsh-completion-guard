@@ -5,12 +5,14 @@ import { lstatSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFile
 import { dirname, isAbsolute, relative, sep } from 'node:path'
 
 export function predecessorActivationFixture(version = '0.13.0') {
-  assert.ok(['0.13.0', '0.13.1'].includes(version))
+  assert.ok(['0.13.0', '0.13.1', '0.13.2'].includes(version))
   const fixture = JSON.parse(readFileSync(new URL(`../tests/fixtures/upgrade/legacy-${version}-activation.json`, import.meta.url), 'utf8'))
   assert.equal(fixture.schema, 'dsh-predecessor-activation-fixture/v1')
   assert.equal(fixture.predecessorVersion, version)
-  assert.equal(fixture.sourceCommit, version === '0.13.1' ? '38ea950380fffda88d9b48d5cdedd2c6ba6f0c61' : '650a952a7d44d4be2b9019dadc2f11e5104ff06e')
+  const sources = { '0.13.0': '650a952a7d44d4be2b9019dadc2f11e5104ff06e', '0.13.1': '38ea950380fffda88d9b48d5cdedd2c6ba6f0c61', '0.13.2': '9935379fd92b72ffe88845c1fcb9a831f4d303c2' }
+  assert.equal(fixture.sourceCommit, sources[version])
   if (version === '0.13.1') assert.equal(fixture.predecessorTgzSha256, 'db1471029c06e535bf2da0e431ecd484f29c1e2e3509d134696bec8334b11075')
+  if (version === '0.13.2') assert.equal(fixture.predecessorTgzSha256, 'b908296b444d6a242baccc81daf6a920caa04b968cf56bf79a4e8e8c4a13b2c5')
   assert.equal(fixture.rows.length, 6)
   for (const row of fixture.rows) {
     assert.equal(createHash('sha256').update(row.binding).digest('hex'), row.bindingSha256)

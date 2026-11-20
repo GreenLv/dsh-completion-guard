@@ -6,6 +6,7 @@ import rc5Baseline from './rc5-byte-audit-manifest.js'
 import rc022rc1Baseline from './rc022-rc1-byte-audit-manifest.js'
 import rc022rc2Baseline from './rc022-rc2-byte-audit-manifest.js'
 import rc022rc3Baseline from './rc022-rc3-byte-audit-manifest.js'
+import rc022rc5Baseline from './rc022-rc5-byte-audit-manifest.js'
 import type { ByteAuditManifest } from './byte-audit-manifest.js'
 import type { PackageRow } from './digest.js'
 import { mkdirSync, readFileSync, writeFileSync, lstatSync, realpathSync, existsSync } from 'node:fs'
@@ -99,7 +100,8 @@ function baselineFor(rows: readonly { name?: string; version?: string }[]): Byte
     case '0.2.1-rc.5': return rc5Baseline
     case '0.2.2-rc.1': return rc022rc1Baseline
     case '0.2.2-rc.2': return rc022rc2Baseline
-    default: return rc022rc3Baseline
+    case '0.2.2-rc.3': return rc022rc3Baseline
+    default: return rc022rc5Baseline
   }
 }
 /** Every reviewed published state, for equivalence checks: a graph whose lib
@@ -108,7 +110,7 @@ function baselineFor(rows: readonly { name?: string; version?: string }[]): Byte
  * only when loading AND modules come from the SAME reference row. The
  * 0.2.2-rc.1, 0.2.2-rc.2 and 0.2.2-rc.3 states are each byte-distinct from
  * every other audited state. */
-const AUDITED_BASELINES: readonly ByteAuditManifest[] = [rc2Baseline, rc3Baseline, rc5Baseline, rc022rc1Baseline, rc022rc2Baseline, rc022rc3Baseline]
+const AUDITED_BASELINES: readonly ByteAuditManifest[] = [rc2Baseline, rc3Baseline, rc5Baseline, rc022rc1Baseline, rc022rc2Baseline, rc022rc3Baseline, rc022rc5Baseline]
 
 /** Validate generator-issued operator-owned authority. The descriptor cannot
  * assert compatibility: changed bytes require the independently issued cache
@@ -280,33 +282,109 @@ export function registryArchiveModules(bytes: Buffer, row: PackageRow): Record<s
  * The production origin is fixed; tests can inject a fetch transport. */
 export interface HostTrustAcquisitionOptions {
   profileRoot: string
+  /** An outer caller may include its own setup in the same operation budget. */
+  signal?: AbortSignal
   /** Resolves the exact installed identity of a not-yet-acquired dependency
    * reached through a consumed adapter's imports. May be async: the Desktop
    * lane reads the app-graph manifest first and then completes the identity
    * with the trusted registry integrity for exactly that name@version. */
-  dependencyIdentity?: (name: string, importer: string) => PackageRow | Promise<PackageRow>
+  dependencyIdentity?: (name: string, importer: string, signal: AbortSignal, importerIdentity: PackageRow) => PackageRow | Promise<PackageRow>
 }
+
+// A contract probe uses one flat package tree. Each importer must resolve a
+// dependency to that same exact registry identity before it can be placed in
+// the tree. Keep graph and download work bounded before fetching new nodes.
+const MAX_PROBE_PACKAGES = 1024
+const MAX_PROBE_EDGES = 8192
+const MAX_PROBE_ARCHIVE_BYTES = 512 * 1024 * 1024
+const MAX_PROBE_PROJECTED_BYTES = 1024 * 1024 * 1024
+export const HOST_TRUST_DURATION_MS: number = 10 * 60_000
+
+export async function awaitSignal<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return fail('host_contract_probe_timeout')
+  let onAbort: (() => void) | undefined
+  const timeout = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(new HostTrustError('host_contract_probe_timeout'))
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try { return await Promise.race([work, timeout]) }
+  finally { if (onAbort) signal.removeEventListener('abort', onAbort) }
+}
+
+export async function readBoundedResponse(response: Response, limit: number, code: string, signal: AbortSignal, detail?: string): Promise<Buffer> {
+  const reader = response.body?.getReader()
+  if (!reader) return fail(code)
+  const chunks: Buffer[] = []
+  let size = 0
+  try {
+    while (true) {
+      const { done, value } = await awaitSignal(reader.read(), signal)
+      if (done) break
+      size += value.byteLength
+      if (size > limit) {
+        void reader.cancel().catch(() => {})
+        return fail(code, detail)
+      }
+      chunks.push(Buffer.from(value))
+    }
+    return Buffer.concat(chunks, size)
+  } catch (error) {
+    if (error instanceof HostTrustError) throw error
+    void reader.cancel().catch(() => {})
+    return fail('host_trust_registry_unavailable', detail)
+  } finally { reader.releaseLock() }
+}
+
+export function parseRegistryMetadata(bytes: Buffer, detail: string): { name?: string; version?: string; dist?: { integrity?: string; tarball?: string } } {
+  try {
+    const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('host_trust_registry_metadata_invalid', detail)
+    return value as { name?: string; version?: string; dist?: { integrity?: string; tarball?: string } }
+  }
+  catch { return fail('host_trust_registry_metadata_invalid', detail) }
+}
+
 export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typeof fetch = fetch,
   options?: HostTrustAcquisitionOptions): Promise<HostRebindTrust> {
   const packages: HostTrustedPackage[] = [], dependencies: HostTrustedPackage[] = [], archives: ProbeArchive[] = []
+  const identities = new Map<string, PackageRow>()
+  let archiveBytes = 0, projectedBytes = 0
+  const duration = AbortSignal.timeout(HOST_TRUST_DURATION_MS)
+  const deadline = options?.signal ? AbortSignal.any([options.signal, duration]) : duration
+  const request = async (url: string, detail: string): Promise<{ response: Response; signal: AbortSignal }> => {
+    if (deadline.aborted) return fail('host_contract_probe_timeout', detail)
+    const signal = AbortSignal.any([deadline, AbortSignal.timeout(30_000)])
+    try {
+      const response = await awaitSignal(fetcher(url, { signal, redirect: 'error' }), signal)
+      if (!response.ok) return fail('host_trust_registry_unavailable', detail)
+      return { response, signal }
+    } catch (error) {
+      if (error instanceof HostTrustError) throw new HostTrustError(error.code, detail)
+      return fail('host_trust_registry_unavailable', detail)
+    }
+  }
+  if (rows.length > MAX_PROBE_PACKAGES || new Set(rows.map(row => row.name)).size !== rows.length) return fail('host_contract_probe_graph_too_large')
   // The equivalence baseline follows the acquired launcher version (rc.3 vs
   // rc.2); qualifiedHostTrust re-derives it the same way for validation.
   const baseline = baselineFor(rows)
   const acquire = async (row: PackageRow): Promise<HostTrustedPackage> => {
     if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(row.name) || row.name.length > 214
       || !row.version || !parseHostVersion(row.version) || !row.integrity) return fail('host_trust_identity_invalid')
-    const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(row.name)}/${encodeURIComponent(row.version)}`,
-      { signal: AbortSignal.timeout(30_000), redirect: 'error' })
-    if (!response.ok) return fail('host_trust_registry_unavailable')
-    const metadata = await response.json() as { name?: string; version?: string; dist?: { integrity?: string; tarball?: string } }
+    const metadataDetail = `package ${row.name}@${row.version}: metadata request failed`
+    const fetchedMetadata = await request(`https://registry.npmjs.org/${encodeURIComponent(row.name)}/${encodeURIComponent(row.version)}`, metadataDetail)
+    const metadata = parseRegistryMetadata(await readBoundedResponse(fetchedMetadata.response, 4 * 1024 * 1024, 'host_trust_registry_metadata_too_large', fetchedMetadata.signal, metadataDetail), metadataDetail)
     if (metadata.name !== row.name || metadata.version !== row.version || metadata.dist?.integrity !== row.integrity) return fail('host_trust_registry_identity_mismatch')
     const url = new URL(metadata.dist?.tarball ?? '')
     if (url.origin !== 'https://registry.npmjs.org' || url.username || url.password) return fail('host_trust_source_untrusted')
-    const archive = await fetcher(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' })
-    if (!archive.ok) return fail('host_trust_registry_unavailable')
+    const archiveDetail = `package ${row.name}@${row.version}: archive request failed`
+    const archive = await request(url.href, archiveDetail)
     let files: Record<string, Buffer>
     try {
-      files = registryArchiveFiles(Buffer.from(await archive.arrayBuffer()), row)
+      const bytes = await readBoundedResponse(archive.response, Math.min(64 * 1024 * 1024, MAX_PROBE_ARCHIVE_BYTES - archiveBytes), 'host_contract_probe_archive_budget_exceeded', archive.signal, archiveDetail)
+      archiveBytes += bytes.length
+      files = registryArchiveFiles(bytes, row)
+      projectedBytes += Object.values(files).reduce((sum, content) => sum + content.length, 0)
+      if (projectedBytes > MAX_PROBE_PROJECTED_BYTES) return fail('host_contract_probe_archive_budget_exceeded')
     } catch (error) {
       if (error instanceof HostTrustError) {
         // Package-level context around the sanitized member detail; the
@@ -316,13 +394,15 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
       throw error
     }
     archives.push({ name: row.name, files })
+    identities.set(row.name, row)
     return { name: row.name, version: row.version, integrity: row.integrity,
       modules: Object.fromEntries(Object.entries(files).map(([file, content]) => [file, createHash('sha256').update(content).digest('hex')])) }
   }
   for (const row of rows) packages.push(await acquire(row))
   if (!options?.profileRoot) return fail('host_trust_receipt_root_missing')
   const targets: string[] = [], checks: string[] = [], equivalent = new Set<string>()
-  const reviewedEquivalent = (row: HostTrustedPackage, files: Record<string, Buffer>): boolean => {
+  const normalizedEdges: Array<{ importer: string; dependency: string; version: string }> = []
+  const reviewedEquivalent = (row: HostTrustedPackage, files: Record<string, Buffer>, allowLockstepRewrite = false): boolean => {
     // The acquired bytes must match ONE reviewed published state. The rc.3/rc.5
     // manifests carry rewritten version/dependency fields over identical lib
     // bytes, so a graph can legitimately equal a newer baseline's loading
@@ -331,14 +411,47 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
     for (const manifest of AUDITED_BASELINES) {
       const reference = manifest.packages.find(p => p.name === row.name)
       if (!reference) continue
-      if (hostManifestLoadingDigest(files['package.json'].toString()) !== (reference as unknown as { loadingDigest?: string }).loadingDigest) continue
+      const referenceDigest = (reference as unknown as { loadingDigest?: string }).loadingDigest
+      let loadingDigest = hostManifestLoadingDigest(files['package.json'].toString())
+      const launcherVersion = rows.find(packageRow => packageRow.name === '@deepseek-ai/dsh')?.version
+      let normalized = false
+      const rewritten: string[] = []
+      // Official lockstep builds rewrite exact internal DSH dependency and peer
+      // versions. Compare that narrowly normalized manifest against a reviewed
+      // release, keeping names, all other fields and every executable byte bound.
+      // This does not normalize a new range, an external dependency or code.
+      if (allowLockstepRewrite && loadingDigest !== referenceDigest && launcherVersion && row.version === launcherVersion) {
+        const published = JSON.parse(files['package.json'].toString()) as Record<string, unknown>
+        for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+          const dependencies = published[field]
+          if (!dependencies || typeof dependencies !== 'object' || Array.isArray(dependencies)) continue
+          for (const [name, version] of Object.entries(dependencies)) {
+            if ((name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')) && version === launcherVersion) {
+              ;(dependencies as Record<string, unknown>)[name] = manifest.hostVersion
+              const optionalPeers = published.peerDependenciesMeta as Record<string, { optional?: boolean }> | undefined
+              if (field === 'dependencies' || (field === 'peerDependencies' && !optionalPeers?.[name]?.optional)) rewritten.push(name)
+            }
+          }
+        }
+        loadingDigest = hostManifestLoadingDigest(JSON.stringify(published))
+        normalized = true
+      }
+      if (loadingDigest !== referenceDigest) continue
+      if (normalized) {
+        const currentFiles = Object.keys(row.modules).filter(file => file !== 'package.json').sort()
+        const referenceFiles = Object.keys(reference.modules).filter(file => file !== 'package.json').sort()
+        if (JSON.stringify(currentFiles) !== JSON.stringify(referenceFiles)) continue
+      }
       const modulesOk = Object.entries(reference.modules).filter(([file]) => file !== 'package.json').every(([file, digest]) => {
         if (!files[file]) return false
         if (row.modules[file] === digest) return true
         const programs = (reference as unknown as { programs?: Record<string, string> }).programs
         try { return !!programs?.[file] && hostProgramDigest(files[file].toString('utf8')) === programs[file] } catch { return false }
       })
-      if (modulesOk) return true
+      if (modulesOk) {
+        if (normalized && launcherVersion) for (const dependency of rewritten) normalizedEdges.push({ importer: row.name, dependency, version: launcherVersion })
+        return true
+      }
     }
     return false
   }
@@ -346,25 +459,59 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
     const reference = baseline.packages.find((p) => p.name === row.name)
     if (!reference) return fail('host_trust_identity_invalid')
     const files = archives.find((a) => a.name === row.name)!.files
-    const same = reviewedEquivalent(row, files)
+    const same = reviewedEquivalent(row, files, true)
     if (same) equivalent.add(row.name)
     else targets.push(row.name)
+  }
+  // Validate each rewritten edge against the actual importer's installed
+  // dependency. Rows outside the critical inventory get their SRI from the
+  // registry as well; version strings alone never establish that identity.
+  const normalizedIntegrity = new Map<string, string>()
+  if (normalizedEdges.length > MAX_PROBE_EDGES) return fail('host_contract_probe_graph_too_large')
+  for (const edge of normalizedEdges) {
+    const importerIdentity = identities.get(edge.importer)!
+    const identity = await awaitSignal(Promise.resolve().then(() => options.dependencyIdentity?.(edge.dependency, edge.importer, deadline, importerIdentity)), deadline)
+    if (!identity || identity.name !== edge.dependency || identity.version !== edge.version || !identity.integrity) {
+      return fail('host_contract_probe_dependency_unbound')
+    }
+    const known = identities.get(identity.name)
+    if (known && (known.version !== identity.version || known.integrity !== identity.integrity)) return fail('host_contract_probe_dependency_conflict')
+    const previous = normalizedIntegrity.get(identity.name)
+    if (previous && previous !== identity.integrity) return fail('host_contract_probe_dependency_conflict')
+    if (!known && !previous) {
+      const detail = `package ${identity.name}@${identity.version}: metadata request failed`
+      const fetched = await request(`https://registry.npmjs.org/${encodeURIComponent(identity.name)}/${encodeURIComponent(identity.version)}`, detail)
+      const metadata = parseRegistryMetadata(await readBoundedResponse(fetched.response, 4 * 1024 * 1024, 'host_trust_registry_metadata_too_large', fetched.signal, detail), detail)
+      if (metadata.name !== identity.name || metadata.version !== identity.version || metadata.dist?.integrity !== identity.integrity) {
+        return fail('host_trust_registry_identity_mismatch')
+      }
+      normalizedIntegrity.set(identity.name, identity.integrity)
+    }
   }
   // Follow every consumed adapter's actual installed
   // imports to independently acquired dependency identities; no range/latest
   // selection and no local manifest/SRI assertion establishes provenance.
   const visited = new Set<string>(), queue = [...new Set([...targets, ...packages.filter(p => (HOST_CONTRACT_CONSUMERS as readonly string[]).includes(p.name)).map(p => p.name)])]
+  let edges = 0
   while (queue.length) {
     const name = queue.shift()!
     if (visited.has(name)) continue
     visited.add(name)
-    if (visited.size > 160) return fail('host_contract_probe_graph_too_large')
+    if (visited.size > MAX_PROBE_PACKAGES) return fail('host_contract_probe_graph_too_large')
     const archive = archives.find((a) => a.name === name)!
     const manifest = JSON.parse(archive.files['package.json'].toString()) as { dependencies?: Record<string, string>; peerDependencies?: Record<string, string>; peerDependenciesMeta?: Record<string, { optional?: boolean }> }
     for (const dependency of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).filter((dependency) => !manifest.peerDependenciesMeta?.[dependency]?.optional || dependency in (manifest.dependencies ?? {}))) {
-      if (!archives.some((a) => a.name === dependency)) {
-        const identity = await options.dependencyIdentity?.(dependency, name)
-        if (!identity) return fail('host_contract_probe_dependency_unbound')
+      if (++edges > MAX_PROBE_EDGES) return fail('host_contract_probe_graph_too_large')
+      if (!identities.has(dependency) && identities.size >= MAX_PROBE_PACKAGES) return fail('host_contract_probe_graph_too_large')
+      const importerIdentity = identities.get(name)!
+      const identity = await awaitSignal(Promise.resolve().then(() => options.dependencyIdentity?.(dependency, name, deadline, importerIdentity)), deadline)
+      if (!identity || identity.name !== dependency || !identity.version || !identity.integrity) return fail('host_contract_probe_dependency_unbound')
+      const existing = identities.get(dependency)
+      if (existing && (existing.version !== identity.version || existing.integrity !== identity.integrity)) {
+        return fail('host_contract_probe_dependency_conflict', `dependency ${dependency} resolves to conflicting identities`)
+      }
+      if (!existing) {
+        if (identities.size >= MAX_PROBE_PACKAGES) return fail('host_contract_probe_graph_too_large')
         dependencies.push(await acquire(identity))
       }
       queue.push(dependency)

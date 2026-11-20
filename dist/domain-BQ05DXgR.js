@@ -2126,6 +2126,17 @@ function selectLane(value, depth, lane) {
 	}
 	return "no-match";
 }
+/** The reviewed auxiliary fallback shape has a complete ordered conditions
+* object first and repeats its require target as the final fallback. Both
+* active lanes must resolve in the first entry; blocked or invalid entries
+* never fall through to a later array item. */
+function exportEntry(value, independentLanes) {
+	if (!Array.isArray(value)) return value;
+	if (!independentLanes || value.length !== 2 || !value[0] || typeof value[0] !== "object" || Array.isArray(value[0]) || typeof value[1] !== "string" || !rawTargetAllowed(value[1])) throw new Error("unaudited export array");
+	const required$1 = selectLane(value[0], 0, "require"), imported = selectLane(value[0], 0, "import");
+	if (typeof required$1 !== "object" || typeof imported !== "object" || required$1.target !== value[1] || !rawTargetAllowed(required$1.target) || !rawTargetAllowed(imported.target)) throw new Error("unaudited export array");
+	return value[0];
+}
 /** Raw-target validation, per Node's ERR_INVALID_PACKAGE_TARGET rules. */
 function rawTargetAllowed(target) {
 	if (!target.startsWith("./") || target.includes("\\") || ENCODED_SEPARATOR.test(target)) return false;
@@ -2145,10 +2156,10 @@ function rawTargetAllowed(target) {
 	return true;
 }
 /** True when every lane Node may actually load resolves to the wanted file. */
-function interpretScopeRoute(session, scope, request, wanted, selectedLane) {
+function interpretScopeRoute(session, scope, request, wanted, selectedLane, independentLanes = false) {
 	const packageName = String(scope.manifest.name);
 	const subpath = request === packageName ? "." : "." + request.slice(packageName.length);
-	const rawExports = scope.manifest.exports;
+	const rawExports = Array.isArray(scope.manifest.exports) ? exportEntry(scope.manifest.exports, independentLanes) : scope.manifest.exports;
 	let rootTarget;
 	let subpathMap;
 	if (rawExports === void 0) return true;
@@ -2163,7 +2174,7 @@ function interpretScopeRoute(session, scope, request, wanted, selectedLane) {
 	let entry;
 	if (subpathMap !== void 0) {
 		if (!Object.hasOwn(subpathMap, subpath)) return false;
-		entry = subpathMap[subpath];
+		entry = exportEntry(subpathMap[subpath], independentLanes);
 	} else {
 		if (subpath !== ".") return false;
 		entry = rootTarget;
@@ -2188,7 +2199,7 @@ function interpretScopeRoute(session, scope, request, wanted, selectedLane) {
 * both startup lanes. Wildcard source-only exports are not entrypoints. */
 function runtimeExports(manifest, independentLanes = false) {
 	const result = [];
-	const raw = manifest.exports;
+	const raw = Array.isArray(manifest.exports) ? exportEntry(manifest.exports, independentLanes) : manifest.exports;
 	if (raw === void 0) {
 		const main = manifest.main ?? "./index.js";
 		if (typeof main !== "string") throw new Error("invalid main");
@@ -2204,8 +2215,10 @@ function runtimeExports(manifest, independentLanes = false) {
 	const dot = keys$1.filter((key) => key === "." || key.startsWith("./"));
 	if (dot.length && dot.length !== keys$1.length) throw new Error("mixed exports");
 	const entries = dot.length ? Object.entries(raw) : [[".", raw]];
-	for (const [key, value] of entries) {
+	for (const [key, rawEntry] of entries) {
 		if (key.includes("*")) continue;
+		if (independentLanes && key === "./" && rawEntry === "./") continue;
+		const value = exportEntry(rawEntry, independentLanes);
 		const required$1 = selectLane(value, 0, "require"), imported = selectLane(value, 0, "import");
 		if (typeof required$1 !== "object" || typeof imported !== "object" || !independentLanes && required$1.target !== imported.target || !rawTargetAllowed(required$1.target) || !rawTargetAllowed(imported.target)) throw new Error("unaudited export conditions");
 		if (independentLanes) {
@@ -2289,9 +2302,13 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 					...manifest.peerDependencies,
 					...manifest.optionalDependencies
 				};
-				const names = new Set([...Object.keys(declared), ...Object.keys(mapped)].filter((name) => graph.packages.has(name) || installation.packages.has(name)));
-				if (names.size === 0) continue;
 				const own = graph.packages.get(String(manifest.name));
+				const names = new Set([...Object.keys(declared), ...Object.keys(mapped)].filter((name) => {
+					const target = graph.packages.get(name) ?? installation.packages.get(name);
+					if (!target) return false;
+					return !target.independentLanes || own?.root === root;
+				}));
+				if (names.size === 0) continue;
 				const importers = new Set([manifestPath]);
 				if (own?.root === root) {
 					for (const file of own.files) if (/\.(?:m?js|cjs)$/.test(file)) importers.add(join(root, file));
@@ -2344,7 +2361,7 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 							if (selected) {
 								const request = name + (subpath === "." ? "" : subpath.slice(1));
 								const scope = nearestPackageScope(session, dirname(importer));
-								if (scope !== void 0 && scope.manifest.name === name && Object.hasOwn(scope.manifest, "exports") && !interpretScopeRoute(session, scope, request, wanted, lane)) return false;
+								if (scope !== void 0 && scope.manifest.name === name && Object.hasOwn(scope.manifest, "exports") && !interpretScopeRoute(session, scope, request, wanted, lane, expected.independentLanes)) return false;
 							}
 						}
 					}
@@ -9040,10 +9057,1287 @@ var rc022_rc3_byte_audit_default = {
 var rc022_rc3_byte_audit_manifest_default = rc022_rc3_byte_audit_default;
 
 //#endregion
+//#region manifests/rc022-rc5-byte-audit.json
+var rc022_rc5_byte_audit_default = {
+	schema: "dsh-host-byte-audit/v1",
+	hostVersion: "0.2.2-rc.5",
+	upstreamCommit: "9c2670d3bce5275e0d1610272958121af87787bb",
+	auditedPlatforms: [],
+	packages: [
+		{
+			"name": "@deepseek-ai/cordis",
+			"version": "4.1.0",
+			"integrity": "sha512-CJrjNyBkKn1SfvBQUcgFYKFnLjS+uKrhdMsbHU60xabvi12d+xQ+IQSNlME5Z+B+4Zi6n4BDknKY94tEPeo47w==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/cordis/-/cordis-4.1.0.tgz",
+			"sha256": "3b0099a6aa9b0b52c3e199042acf6f1ae195c5690f7de11aa61171bca7752eca",
+			"modules": {
+				"bin.js": "cf84978c7e4165bf090b0d50c34c1986d06577f2ada27c902660783a142c3f81",
+				"lib/index.js": "627409afa06a265f7253200d3bc4648e88805c39fd3768568eb9b9518a31fe8f",
+				"package.json": "70be1056619663339433309474b1e6a2307088097af3cb082afe4b5ca2021b26"
+			},
+			"programs": {
+				"bin.js": "c4ee390e978fc564ad126ab7bb718aa0f5aec2c20a823ccbbb3bb0bf526d03a1",
+				"lib/index.js": "556b0733d20e54326c66750cb72de723864a694b29f780e9998e40c9124daffe"
+			},
+			"loadingDigest": "6e76167ba44b978943dd7d62326342049be3f0f16b15a93dfef433545c3eb1e5"
+		},
+		{
+			"name": "@deepseek-ai/dsh",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-cNbp12tLYLUTXaVli7zwwMjzmmEVCD1PRldg4oKtXM4+lFYckcaliMS2PU/FoThB4iAN/fKOSID0nrtRZU4Gjw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.2-rc.5.tgz",
+			"sha256": "67da5a3c458f46cd278e0eec6ad0e3a44e99fd13087c6f11a1b362268900a52c",
+			"modules": {
+				"docs/dependency-catalog.json": "ff57ded8ee9574efcc9a00eabf918a3dc6f180d0da27174a3716841835e46a1d",
+				"docs/persistence-schema.json": "dd780dd09961cb7b94f1eb80c57fbd4fcdbe1222eccdbf5420088b85afc53218",
+				"lib/bin-CwxESKe-.js": "6d6f81facede1b4abe66e69ee570caf74e9f6aaa1de354568be2debe1109f266",
+				"lib/bin.js": "36f86742e0c3cc1c3b2dbaa6582ee00b0c37bc4f5a190f7531b5303bf3efb6d9",
+				"lib/dump-config-CKGOvlAq.js": "c367fa59eb2d431b4142480423b7619241c3bfcb6aad786b51b8cfc68426bbf4",
+				"lib/dump-config-DYSXukkc.js": "6f69c7e83909a4ad1fac69c01bc732fca98e18fde9207b15b4a1712bed7ae21e",
+				"lib/dump-config-schema-Dq_QZISg.js": "fcab60a4b7651892d3da68f9e8fb949318066aa709e6c9da2732c42330e86634",
+				"lib/plugin-DC80YBt4.js": "7a50483f635ad81d6890984b91097f1909d06d8c929c0e4e3d4e91d82ff903ae",
+				"lib/profile-boot-QhDEDXsF.js": "c7ff07e9b156cddb762cc7b2b32b6499880b73eef4c52281ee0d8af792f57878",
+				"lib/profile-boot.js": "a21b184b267566b72081313cbd3a879bf6d40e7a70e9801fad9d84bd01432e8a",
+				"package.json": "2a694f0180a778c1c083fdc0369500d3638fa72457aee882e0aeedf14581f2ff"
+			},
+			"programs": {
+				"lib/bin-CwxESKe-.js": "cf5601a5d621e964a451bd862cde2f07848c81edf28a8a84a31fcb20ce8d9dfb",
+				"lib/bin.js": "1a8453cc35d5daa54a9c97f0bf4d89481654fb80c0fae9927d620073324b9e53",
+				"lib/dump-config-CKGOvlAq.js": "ae4bf4c637053e900299debee67871460047a8d3bc210435e558539a0121a055",
+				"lib/dump-config-DYSXukkc.js": "6b854fcafb2761ffff5f1cf9e3f0b1b3f673240ad7eca91912bca9ccc032c5c6",
+				"lib/dump-config-schema-Dq_QZISg.js": "572c2ba5abd96c73b4a7a352ce622f75df0485f19490ceaf19240b9c511b4054",
+				"lib/plugin-DC80YBt4.js": "1859f2785ff788c12b3a0e69079bd60917838133dc3c41d99a2218dece0ea199",
+				"lib/profile-boot-QhDEDXsF.js": "a6af5c7a9b19eb4188f8d4c6170002257eb634c7a0c284e805aa241a5d745a0c",
+				"lib/profile-boot.js": "f5bf6d438e47494565ff3f4dd28617d9bcdd3ba81d94d584eda50994e60be1ec"
+			},
+			"loadingDigest": "d3f89483454a20af76d08b772b6e7620fc714b122058f03b43e67cdf2cdd0439"
+		},
+		{
+			"name": "@deepseek-ai/dsh-agent",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-nT7dv7OyNmtkGe50RfSlNp8QwbaP66LHr83sZ3wb9J6LJQINZHPhjxVamQ1h2JhnFfi8RSkajl6l2Kdp6GCGqw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent/-/dsh-agent-0.2.2-rc.5.tgz",
+			"sha256": "40ef23426fea6d923f1a1e8c571a571c679ae005116b81d67cb12e10f8d62d08",
+			"modules": {
+				"lib/index.js": "bc2a39dea1174c2b2dc0641f08094f840d3a1e414bef42ac93c945f7235d7ead",
+				"lib/types/archive-admission.js": "d42fbc10fbf357f1343d4c57eab55d3c7a6bd53fe20a29469cf0b1b67e55c4dd",
+				"lib/types/consumed-work.js": "e20ac9e88d81db3f5e25908a50ad4532cd1d93f410ad5ec4933ef9aa24da5c2d",
+				"lib/types/dispatch.js": "f29567a8eb2f04aaf34523e597d52e46f0fb5bed273db4bf7fa25bc38e2877da",
+				"lib/types/index.js": "22736d82d6e85b1b4edf072b7b77eae3ad2cdd5cf996fc282fab4f9955f81844",
+				"lib/types/model-selection.js": "cafe7ddb2f92e34d4e5b1efb7b52a9f71e2331c9d36eec644e0a84998013e6e3",
+				"lib/types/projection.js": "abb4b9fa43f9a22c4e0c26937dd4a706a35af226023c778a6a840f9dae917d6e",
+				"lib/types/runtime-types.js": "72347f43fb79c35cff8565b6428c6d7b96a78267cf8994ea3ffd0830a83a21d2",
+				"lib/types/types.js": "f4ef7228255d5f64ba546ed2a2b6be63601b77c7b58ac3a58a74f4e8f970cb30",
+				"locale/de.json": "af50e2a09d6579312e1a99e22d29fcb9add4b8ae4b28f04e75bc03b808a11792",
+				"locale/en.json": "c6c65a47ec5536cc9e08146aad920229d0af584deb5d78876c0299d5927dc3cf",
+				"locale/es.json": "b668943b66bf9770cf02d5e466c3260083c9b82a2bd5f246894d241fdbfeb4c0",
+				"locale/fr.json": "e55503cfdd6cd57a1f6eefe95c0f3f511d01d3c6a42c24430f803dd4229c337d",
+				"locale/ja.json": "ad27451ad8ad171b36036777aaa78d262dda198b1538e1634145823ab8cc6e1d",
+				"locale/pt.json": "c1a332aad791f09a91548905c986010e5c98575f646ff7d9d99440cf6b5d791d",
+				"locale/ru.json": "466ed7c7f5dd9de44e82ef749ef123dbe268e2558721000dc52f53fbc33ddc96",
+				"locale/zh.json": "46aa2bef292d2bd277af584c8df8e98716284f289fa83293ae2a6db83c6e9cc1",
+				"package.json": "c51b0b0d75765941d741f8450fcd7e49b0a2b2093cbb0578ab8d8bf431a71f6a"
+			},
+			"programs": {
+				"lib/index.js": "208140469dc4f2148e506b2801d54f948ef5f67aac064792e2372987205a6d54",
+				"lib/types/archive-admission.js": "0a416ad4ab32c0320bff23688f5e0a6ad0e9f59229eacd4cd726466d7554ef26",
+				"lib/types/consumed-work.js": "8164baade680544227db7833a0f8fc4e78ae687a654bff9fe08837ef0fdda3e7",
+				"lib/types/dispatch.js": "47931884087a468200025ba734288ec3bbcea6d24cc8bc781f5cd6772ff56439",
+				"lib/types/index.js": "809a6b5d4520539b05e5c2f6630a5e17ed9d11693ca7c23677aec7b04b90fd5d",
+				"lib/types/model-selection.js": "3cd7c5a23cf8daba31ef76c62c23d5ed144f93f69813cf3df00c911f40f46fe2",
+				"lib/types/projection.js": "42702ee02beab61f03e147092cf0c666d425579149ea994815012fee7e2bb9d3",
+				"lib/types/runtime-types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+				"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+			},
+			"loadingDigest": "9d687bdf1045a57296e1e106567cf300481c9ba884b8d9e0874b2741e00f4052"
+		},
+		{
+			"name": "@deepseek-ai/dsh-agent-loop",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-k/WGOe8J81AlqTaG0t+p3AGB+TnQg8TZTEaBRC5eG6F6/zsszDVxycHprqGCwHsn0echFjZtS7V1ft4c1B6kbQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent-loop/-/dsh-agent-loop-0.2.2-rc.5.tgz",
+			"sha256": "fed8f2e347b20cfb070ef892c46bf0f00329afa26bc4be8de4dd32788174457a",
+			"modules": {
+				"lib/index.js": "f09f60814d4e96a880f41b9fc3832f33c56a28f954f48810d8439ce83ad6ffa8",
+				"locale/de.json": "3ef123c2ab010e535383b886392d43caf047fe06dc2872e4816279847088b917",
+				"locale/en.json": "623bd21dbacb0ab21a2330cfe3f65ecdb8c0c144532d3a46082dbf08875073fd",
+				"locale/es.json": "d101ea63c1994ae1fc8b756c78788935d3836af6453ec102a06af1f24d42c212",
+				"locale/fr.json": "0baed1861fb50e1c45e59d68c15aa81fdd195400dcc11aa889d0c0127753d5a7",
+				"locale/ja.json": "895e00ee34130abe0efeeb54e09ab9d57ebb89f0a426ee77ba27406d2cb798f8",
+				"locale/pt.json": "d9b522607522896a6a1f90f284c47501483d5b68d3e138475b4b02c1158b2682",
+				"locale/ru.json": "5eab4ae19dc5a043e660800a97f3bc79938bf94e1aa297cab3ace5abd78cd11c",
+				"locale/zh.json": "4640bf1aa06b93d73759094420d93afe75777658c77fe5c5ab57f47d73937ce0",
+				"package.json": "803301d2b51cafc5be842930e0d8c1ece352a622d545f06af874a2fe5a01dd67"
+			},
+			"programs": { "lib/index.js": "70a0e672303b5d3834e1dbffdf3f7fd28717457abb28ca7ae3baad3ab1af982c" },
+			"loadingDigest": "81235da01ca38e8a9318399e562a81d475d15bc082381fa47d81e1a9c344a4e3"
+		},
+		{
+			"name": "@deepseek-ai/dsh-app-boot",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-aGB6eK2UrmD64mXScIGqic5QtCNep9J/t7oAnCQIC9wFNhOm23hf/L8emNGofGLfZt4HBFLD3ZdceBgYCBb0ng==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-app-boot/-/dsh-app-boot-0.2.2-rc.5.tgz",
+			"sha256": "c869d50113ee665143117b7079a1dd795b781916793c0f24e12898297b42e693",
+			"modules": {
+				"lib/index.js": "a8d2138bb274bd982079df14a615f6c0d5d7589c9faeae81973128a72293b6de",
+				"lib/worker/profile-resolution-bootstrap.js": "4ccdf0cb1177a6fc9442f0392fbba88ea1b80b6738f3cae80d34be8d5b521b7d",
+				"package.json": "0d394c7f407a6b8f561a0722721200ae02a6c23e404d94d9f65353862a9a6962"
+			},
+			"programs": {
+				"lib/index.js": "80b1c837554ce9fac74f0a3f5830beeec6fd2705178121a9a45b3e0d116002dc",
+				"lib/worker/profile-resolution-bootstrap.js": "1c0075acf72e0b1aab4c83b42ae36d6af567e98ab3dcfbb51e30a95b29086c52"
+			},
+			"loadingDigest": "d40fb09b22805c0976307fdf47f37b7dd2d27c702aab6ce6cb068f4677d83dda"
+		},
+		{
+			"name": "@deepseek-ai/dsh-attachment",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-2OIVK/2e++oIciTTD2GT3gRb18WpPBVlOV35YYEqQUxw3VxN+QaHveQ+nus9DZAd/le3VDuq+/3m83i8Nxk9gA==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-attachment/-/dsh-attachment-0.2.2-rc.5.tgz",
+			"sha256": "190394ea4154f28c8941602b21886d47b2d9b1b836c9c6c5dc33f615eab532fb",
+			"modules": {
+				"lib/index.js": "1de6cc47488042638d708ba6c492e2afad3bdaf65ba7e91720d37bac06a9b9dd",
+				"lib/types/admission.js": "e4afabe831d34e00d96416bf902a77bb3cbe3754769b09b0d14142466a340684",
+				"lib/types/brand.js": "5481fe7d3a244f161d54dc7646612fd7654401782d3f0d5fd657247480f6747d",
+				"lib/types/error.js": "a0370894bd08d21f134b25a32e8cd5bded296005eb5ff771e6ac7672d9ef750c",
+				"lib/types/index.js": "1ed92ad7e4e17310ab6ece2eb9fb35cdb209578df90984da6d50a2e50d130971",
+				"lib/types/request-projection.js": "8d184a401ec5ea5b7fc3708870205042cc1afc666655e4e8e4d1d11eefdadf9d",
+				"lib/types/types.js": "9a08e59bd2b21a42126b01c3598b057bb5d3be987c200562800e29806e10e50d",
+				"package.json": "6bd399a76d9e41b7b24cd295b4197b7308bae700d57f0c6b43542e76676697c7"
+			},
+			"programs": {
+				"lib/index.js": "95bad3c10e38f8dcedad4e9ddc1980a1a5935f16873342cb1dc6cf0d27edfe47",
+				"lib/types/admission.js": "ff7bb33a61e5b1800aaaa1c9c716a0bc30e48dae7f0b94742480ec40fadfc292",
+				"lib/types/brand.js": "219810967eac99fa85fcd3132a30f6298ee9b663c0c1473cdca6bd901aecddfe",
+				"lib/types/error.js": "d32ed4bfd8944eff421f07f7fd5cfc6018ea35a386ed56dbb74a13cebad52104",
+				"lib/types/index.js": "c76a9e2fbd92dd22131f925bffff8cd1713c7bc2b651592b76515f63e499337b",
+				"lib/types/request-projection.js": "918f29b1549200f0268e104250b47b5feb6841b697f6d56088f16032cd5223a9",
+				"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+			},
+			"loadingDigest": "fe30622821188f6d8691a71d2ee6600a6be9aaa8ad30a5c10d90e80c5b577d77"
+		},
+		{
+			"name": "@deepseek-ai/dsh-base",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-wLGNM8LCdGpgqRsxiQdLHLAJ7aoDDiB0XFj09p4lFbycJlW+7qN7IsXLAOcERZ+u3xaWzL22sxPtuGCN/JCQyw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-base/-/dsh-base-0.2.2-rc.5.tgz",
+			"sha256": "562f9909caf601b95105ccc18cd89888c69c3cae9cf76f310db59c09f699fba7",
+			"modules": {
+				"lib/index.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+				"package.json": "45efcc83b2a6ae6fcfe5cc7cebae4011f52d8e1e37fbff372cd91e07f4b8fe01"
+			},
+			"programs": { "lib/index.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8" },
+			"loadingDigest": "2ed65c5d1585e506fec806809d98691cac487dc87f851cef074fcfbda3731fb7"
+		},
+		{
+			"name": "@deepseek-ai/dsh-bash-local",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-BYLzpysyTnzt79LVkaHr9KCQjiz/Mou0gnbMRFwDdGsXgWou7og+Ui2pwdEqGAx8zFSRNV0DV7fDfqsnHar+Uw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-local/-/dsh-bash-local-0.2.2-rc.5.tgz",
+			"sha256": "4e298b43f6a7e4660d0420ae667f077afc93c5131a93cf2d823829da177eee6d",
+			"modules": {
+				"lib/index.js": "6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb",
+				"locale/de.json": "6bc5123fe77b5cfbcadfaf5fe49fa17d50e3ddaa206fcf43c7ca2a086ab90c1e",
+				"locale/en.json": "69b6f75b364658c4c2052991f9ecb9a9b60ae74541464f4552f6b5e54c2566c0",
+				"locale/es.json": "9067506bb0272638b71fe9bbbed0ce698d14fa1343978693c35d69fb65c5cf4f",
+				"locale/fr.json": "9205b5eb3c0369dec02642f2e0fa234323f00533f26faa6034c7b5e2f1cc3616",
+				"locale/ja.json": "99b5a50efa069a417ce19ea0fced00ed9abf5e8ee1c96dfaa8b7f71886b59866",
+				"locale/pt.json": "043b28a4fe3494c989fecedc3b87862d11ab805bad905eeff2bf86069dbb2a06",
+				"locale/ru.json": "a7e7fcd47aab583543a08e4100f51a382af3add795f4cfb3fb84ec1f1c19fe7c",
+				"locale/zh.json": "ca731bda2457b5e3a7cf14b6dccbaba1830ed06a7d948c874533ed09061cac10",
+				"package.json": "96f767449fa946d486bf5861763bc8d31bade5f3a5d6ab5e37e22a97e2608a06"
+			},
+			"programs": { "lib/index.js": "bad1dad01d2dc853e47f5b3452db5e871039e54d3f1859086931b7dd74675508" },
+			"loadingDigest": "79659715b779ba989fc775b5bfb2c8bad8da08afbf81379dec61b9eac1c3ab08"
+		},
+		{
+			"name": "@deepseek-ai/dsh-bash-sandbox",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-7pir1sKayE7Ll1tvCGL9jv5VTYRIb//5epZZOAWwbZ714injFiv5cRj/OJumDQMPLGUhufSmsq27BDOMKYmidg==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-sandbox/-/dsh-bash-sandbox-0.2.2-rc.5.tgz",
+			"sha256": "380d13fc208036a54fad1667be8faa9e20c63c1ffe3fe16792aaec16c6f674b8",
+			"modules": {
+				"lib/index.js": "0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d",
+				"locale/de.json": "02af2c65936f2afdcb3aa6218f2deb5fbbfce0862dd924dc8db29550c0571efa",
+				"locale/en.json": "f74279a8d08d3edf805527c6de49c51e732f7d0865643b62fabb453e861b803c",
+				"locale/es.json": "9da0c2fb73b3b77e7515952c0bc4b783afafdb8baf1077ab35b9318784deeadb",
+				"locale/fr.json": "adc4285b0d2cf452cf075cc132896bc74abc3a9d29316ad33af967351a638a14",
+				"locale/ja.json": "86264215fc8d94f3e872a0118582c7e4314784c6a39bf7d91f486cfd955fb2bb",
+				"locale/pt.json": "5bee5276deb5f8128509d66db2bfc171f2f6177e69f95aa841d2ed2c59ec0b09",
+				"locale/ru.json": "7328ce36bd29116bb35aa43bd37ae2c4c2e1c50164804e80c6709c884e4f7159",
+				"locale/zh.json": "29bf5a5e4397902c0aaf4c387101dd41e68a68a23e9f06e05fdd3dc8f496e2d5",
+				"package.json": "9006098ea816b14b1675beec77caef803b0768870b9cc77bf59e07c2c2547787"
+			},
+			"programs": { "lib/index.js": "007bc497922220ffe1723faaa96bd367356c81558c1b50b81c1c0601bff281ab" },
+			"loadingDigest": "90ab19a32e8a8610f45a301051b6d568c58b651a60594627ab9e3bf53a527537"
+		},
+		{
+			"name": "@deepseek-ai/dsh-commands",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-Ak2P3/uA6gn0YEtAbqhxHw5LVv4crgrxdfcT59dFaUb1vOqYi5lontmfJcVfiH6gPcPwLDuoo+kO6mULo+GWtg==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-commands/-/dsh-commands-0.2.2-rc.5.tgz",
+			"sha256": "b3c6f693fe4577c48b667c922f07ceeaafdfed4839ef5855a459a0e6a37736d3",
+			"modules": {
+				"lib/index.js": "88909a0915e4e3b2148c72a912987c3e29ba025b5dea589a0f4543040dc34750",
+				"lib/typert.host.js": "43c1447cb49c4203a97f8dc7ddac7016938dae9c13f4d512b0d4b508cfbbb74f",
+				"lib/typert.remote-client.js": "f317056b4e54dcaea1f20f125bb091a60dbf2fb5aa46274bda0d646473d810d6",
+				"lib/types/brand.js": "50808fed83c5cfe09b80df4165108abba0188645b9b9d39d0426b293e8f188dd",
+				"lib/types/builtin.js": "b4edc7c4bb6ee763fbf95c233ff931567443547ff6f84c0669b52d05274007b5",
+				"lib/types/index.js": "e3a06e7bf8da759c727a529d1e6b30c831232318602fcd28e66297ba200ef495",
+				"lib/types/types.js": "06f43511aa44249a435d74bf2b168bc767460930d874764c69add444510579b3",
+				"locale/de.json": "1373840d5cbad5daa1d275cf582b719ebd2b75eb310a922d4ffc7968f9065ae7",
+				"locale/en.json": "5f8ebe08efa8d103018d0874237eddeb907af7d9cb59b582068546c6f975ebba",
+				"locale/es.json": "b95d0ac15a5ca2b0da8be147653a11e1a81fa591a790fb0d50cb15b489969d8c",
+				"locale/fr.json": "e420b9dcacb8969e22afa416312c8b7eef9c444a2641e943d04c75cd52d0b47e",
+				"locale/ja.json": "b3b5dd5e6b51fc4d6f6bb7abc0baf2c88a65f75c2f5d74ad802cef6807c690f4",
+				"locale/pt.json": "08ecd80dcedffcff36b1a7d94d74eaddb74fbd27a62983cfa87db165b2fdddac",
+				"locale/ru.json": "295e7c3924b45aab136568d5e150064bd518707ed542b5680f80eb0155c2e1f0",
+				"locale/zh.json": "0a8fb9c8dafa116fc94361d3027cc0edf9119d160a903b5fffb5228ee1ca5675",
+				"package.json": "cdbffe9f50f88514d7faf31874d1152afabd6a5bd2eda7309a5b5d4b15a0767c"
+			},
+			"programs": {
+				"lib/index.js": "f9f0a77cc19a11675b449261467e8d07934d696e4e543c56b0e4a341a12edb0f",
+				"lib/typert.host.js": "21278163ba9f8683d1c6500361894ee8ab626d39159207b8547feaaacad593a0",
+				"lib/typert.remote-client.js": "51739c9135ea1874874e4b299be6226d89536ad465f09dc34e5edbc75aba7d60",
+				"lib/types/brand.js": "3892c532b1fcdaefadef5093c73d5b6bb6f718d1befee5ad68b1f8c66a9d817a",
+				"lib/types/builtin.js": "08640b8c33acc44c6d31aac1f9121e0f4abf44a0949ba3cb997441fe7078e40b",
+				"lib/types/index.js": "0ca9432876c5276664b12bcb83c0228f88020b4c9e911bdb59fcf4b36e6ed954",
+				"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+			},
+			"loadingDigest": "b6817818010c4083700ecd446efccefe9b10db25a11b13777af8cc6139a47d2c"
+		},
+		{
+			"name": "@deepseek-ai/dsh-fs",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-c2cNcamLwoXEYKR6/63S3LixoCTrVoSoHIpDgNCPNGQ+kcHD0+IiOPBuWBHsqqddUymr9NiXa62JJqgrgRXV/w==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs/-/dsh-fs-0.2.2-rc.5.tgz",
+			"sha256": "865a248181723722dd38993c847c7443d76d555bbf53358c8f76717b85f70442",
+			"modules": {
+				"lib/index.js": "60149991bb00588070281c79481c17b8b43ff62ed45222d9f9935ba6b5b17f2b",
+				"package.json": "bb409be7352e4ecaa88c5a2d09662c2fc0748726d5908f516ef9add81ebb337c"
+			},
+			"programs": { "lib/index.js": "dafea40cad012952b00b21daeb4c38a8a921b7c03a50500e29f5c05c9cbe3d95" },
+			"loadingDigest": "8176e23e47de6934c3c4f6e746be8870e1897f120df4e42933a2acf8c96c0825"
+		},
+		{
+			"name": "@deepseek-ai/dsh-fs-local",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-O8W28R3fOLAVLnExgT04R/RF7q9edN+KfFEm1tdm0g9KmTpnHVbHtDJ2lb/NSSJcTfTGsm3fhgSGCI+AqQ6isQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-local/-/dsh-fs-local-0.2.2-rc.5.tgz",
+			"sha256": "309888f2789ea3073c46bd9eb2a78064f57c61e4bb9a5d3bd978ef561d2c3817",
+			"modules": {
+				"lib/index.js": "610a3ba3658e55adaa3d8d21e017eb6787860adf317e889fb361e8802c8f5a13",
+				"locale/de.json": "bfb6c6bf383ecbdeb3f4893e78ad56b69ad7b417ce5835e125fc5aad1a74f631",
+				"locale/en.json": "9d42a9b46868a33f7838ad8f2c44104133c4bf7af9724b7d0ddb345cba5f6b01",
+				"locale/es.json": "f0a5367fc560d7a6c44715b0a466e487459f2d82431f44ab097bec7201f46ef9",
+				"locale/fr.json": "16283efee47679ca627ceaf1952ff91ee9475f667c781dcc1ce17268736e66a2",
+				"locale/ja.json": "31be1c7690e41465cbe62b5f6da6e1eb1ee2252ea9458cfe9ed9f515a483fd6d",
+				"locale/pt.json": "0e781de2b506d1646e618ae8154b38a22aeff5e57506100549e7e243c23f641c",
+				"locale/ru.json": "58423d3a8011845a64aa24f83f8e24a5edabcf4dffb0816f5b16d1ff23b115f1",
+				"locale/zh.json": "c695e6e7567c088d2ac8a9f1af43a2bce8c7d0edbeec5e8e7a285c98e253dc74",
+				"package.json": "50b8b1e04e39613da8b9bbb86739b26894c942bebf9865700a149e14b9a82a32"
+			},
+			"programs": { "lib/index.js": "7baa6f05e902b3286c680548b4a69615e331bf1309c7997deb4bc112317dee93" },
+			"loadingDigest": "f4b9e46bda2aacbf87c4d0981e29e049bbaf73127b1f3e9ce8815edfdbe1c5a9"
+		},
+		{
+			"name": "@deepseek-ai/dsh-fs-observation-policy",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-VTrxEtfECGX1IYaohJ5kAVhWvpcLrCzAvPIEFU+wo2RiuKc18xAqgh2ZrUMibu9dYiHlRsQa+Fv0vMT+Op/p9g==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-observation-policy/-/dsh-fs-observation-policy-0.2.2-rc.5.tgz",
+			"sha256": "e3050f4be2d63506f5539b87f0c463dde633ff5c541381c599710ce5c95a3c24",
+			"modules": {
+				"lib/index.js": "f4268f8f10f1137eb84ff4c01ef87bb924f4bffa0457e6f69d6e271ae9083b11",
+				"locale/de.json": "d0f72535a36415356c1798163fee6d148732e7d92358a89bdfb244e6ad221ff7",
+				"locale/en.json": "ed51379c69d552a5e31d446435f0654983fc7207a51e3d921d4709f077f95b7b",
+				"locale/es.json": "77394307a5bde6f8c7f6282e50a0b62b5ee9c51e3b3de10e7dfaa50204a7bf46",
+				"locale/fr.json": "823ad873e1b56c6b818b971cbcfbd7621957b575891e26284231e050e86b8788",
+				"locale/ja.json": "9e7a194760b1d78d310a3683541c948d793bff6eb4d138349dd37b5b5740e7a9",
+				"locale/pt.json": "5a723ddc90a4a8b54c55fae1e6d3cd46d8ddc75f2ad63c8f01ef9cbdebf59e78",
+				"locale/ru.json": "0c6af1de99f6dd409f625271236fa6f7981655b3118b84eaf8d1a25e5fdc59bf",
+				"locale/zh.json": "cea0bfbbeb6b428a9343b265fe6e69055c6e5534a1aa3c818b1f96fc6070000a",
+				"package.json": "d84ed608e3f6e646aa459b2829a40810b10ea9a2691d9a6cf1310cd18662919d"
+			},
+			"programs": { "lib/index.js": "347176bfe92359bce772a2f2e6d709cd0d32ec969459aecf577f7e3f106217e5" },
+			"loadingDigest": "8391a88e9a6088f2a913801087dc8ce20b82887da58bd84990aa64040a3acf44"
+		},
+		{
+			"name": "@deepseek-ai/dsh-fs-patch",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-KL5OyE1l3NSvdCLYT0h2jbmqlyDLQ6LidDBbqHw+xtFniYFFRt8zKU71MYVpaFsI1IGuoqAkilxNxbwXfRFYNw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-patch/-/dsh-fs-patch-0.2.2-rc.5.tgz",
+			"sha256": "f29d7abbd97246b4c0fa7939209127614eb48caed93398c0d8890d4194cbb40c",
+			"modules": {
+				"lib/index.js": "c70df243ca6524ef1f2209736a4c1b4609b683f35ff6f031d35c22397379ca8a",
+				"package.json": "0bf929340116f45f1da2f5a031368c0c7e3cc07931b18b42517cdc913cd0fa97"
+			},
+			"programs": { "lib/index.js": "6ce5219b48d0502c071c566af92bf1741da48f700fb459a8370847cf849f3595" },
+			"loadingDigest": "a306015e263e92e1179d25b1e358ff90d7fe8ad93065f382dec838afbcc9a1e0"
+		},
+		{
+			"name": "@deepseek-ai/dsh-fs-sandbox",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-rXBJZrpGoih0LtZe9B0UZHUg12qAHsOp2UAtOTgSh6WDzXUg0PbpomIhge87bUAnKpA4ulMcJJkqhJTXWVUadg==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-sandbox/-/dsh-fs-sandbox-0.2.2-rc.5.tgz",
+			"sha256": "bd160e799012ef6dc59902ee2c03cda2a652eb6a8e785eb50aefb75d4131125f",
+			"modules": {
+				"lib/index.js": "f1b987fa86584ea3e194a8a413f6ce4c7d1d86de380dc1608634be5124612e61",
+				"locale/de.json": "6d09edc6a2cbc51fa9a6bdf983538dc4f05b39f83c0b7233893c245faeebd5de",
+				"locale/en.json": "6de64de5afeaee205ff143905b7483687f529b1af6e01e8f38fb17ea0e782222",
+				"locale/es.json": "31215dd561ebbfa0a02e870fadff28ee3c54797f8b6e77b4d37a04ae51c44e8c",
+				"locale/fr.json": "dee89c4898e245b764893ef33185f69416806de864649d12cf59eff71faebeab",
+				"locale/ja.json": "e2c9d3ec31242f1e08ef61ed0a528abf78e9be36dd7ab5d8c208af8fa6647ff9",
+				"locale/pt.json": "e79e55fbfffbb80f433d2b006e5b5ff9271e00554a9bbed42d8fadb02060752e",
+				"locale/ru.json": "97ac4bf72a608c84f58d23dc723bcf83f13e1f0671bc5651ab0ed9f2ed27c6df",
+				"locale/zh.json": "af95aeb350bfb289b5d3d978c9d524ac88f10af0afe5e54b323bb356b570c2e2",
+				"package.json": "8097fd4cd5714858937731f232ca35fd966fd031c14b31435b957b477fa78a57"
+			},
+			"programs": { "lib/index.js": "112f99ea6ed5be1369096674c52c39567387db3bfb53ba95b1aed6c8780c9c3b" },
+			"loadingDigest": "9582671be0e32125cc65f4aa4036c051dba1c1b839ae84a16f1a3cc29f82d68b"
+		},
+		{
+			"name": "@deepseek-ai/dsh-goal",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-RhjJ1xBMII7bmJcRSQGt71+BGdOqmn+gRlTrJ7GlFkjnOQLzuG77sHrEzBsprX1T7BMfOtCEmPykEgvTt7DQVg==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal/-/dsh-goal-0.2.2-rc.5.tgz",
+			"sha256": "2551cd11a60ad19ca1a24febfdbce3cfc36abeddadd269e2dec39f3c66bd2445",
+			"modules": {
+				"lib/index.js": "e17dc2886e1bc3c265fa9406ed4a101dd000ed66f8d8cc43f3075346434729cc",
+				"lib/typert.host.js": "63cbcf0890cbce3b09ff2349200337ab6efda491d76b68d0e5a395323379bda2",
+				"lib/typert.remote-client.js": "f3820ad1f010312df5ffb9f17b230af39bb5f2b753a390f5cfeca9331a84ddad",
+				"lib/types/client.js": "4aba033a3236db59a8413dc50ac0640890afe381f5abb93b7bf565b7185e5e8d",
+				"lib/types/domain.js": "4e60898de0faed31865df162479770e0d77cffe654528cef7720ca6c5be419af",
+				"lib/types/fold.js": "fefc4395d38e76e4780165e1881f593cceecc6bb9edb1cc89bf9749902bde881",
+				"lib/types/index.js": "05ada671b80295930a835f8ddb47673888677651d354d1288bbfdefd99c8db1e",
+				"lib/types/runtime.js": "3c6cf442aba70e119669f6a349768fe98b7f4cd0cdec9d389fb51437bf97745b",
+				"lib/types/types.js": "956a9ec9381a09458c283fba5deb4b8b695be6e078e49bbc94d1aa4e586cd32c",
+				"locale/de.json": "08c25ce992bfbcbc2db4a213baf37b49d878b3186577f2825da92a53e838cbd2",
+				"locale/en.json": "e06682291a5b6fad6d17ea8302f40925ace971a35c6a089e46c959f8820e2e8b",
+				"locale/es.json": "125c937e89b4977f7389ff8629a30a7f9307aa62cdc84df598ed6fb949330fae",
+				"locale/fr.json": "a9b885bebdf5513b772cb6e196c83f5f6503cbbfad099131abdc94a86eaa80a6",
+				"locale/ja.json": "b77ec744b54b78716f6b22c175a76457f94a5e313469fedbf884bd91726522fe",
+				"locale/pt.json": "cdf34bf9afc003ee961031a15283a45c3448f3810542846c284d76d189ba6066",
+				"locale/ru.json": "f67598d07163c4c120391dd959199b1ba256c6c4944a92f0310ba9e02d3d9e7d",
+				"locale/zh.json": "6b55a7f101b214a4a3db8899197f45a6da1dce608547413a22e23f59fecf71d5",
+				"package.json": "6a97ffda78605a0fab6bae697a3e3ae27c2276a39a17fde0f989bcdc20d88be8"
+			},
+			"programs": {
+				"lib/index.js": "2799525642dbc27ddcd3d38d575fa7efa1613df5eb8d3f090f6a324ce96510d1",
+				"lib/typert.host.js": "8037f0a96b4098b71d48eff9e49d644fb26a57663dd00f04d557968127ee76bf",
+				"lib/typert.remote-client.js": "c97d34f549f262d0f25f4b2d5a2b97ae0677e88730c6784002650a4b6cef039e",
+				"lib/types/client.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+				"lib/types/domain.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+				"lib/types/fold.js": "7b45a8c74e7d07714193c09b749cc8705b0df4c26d62f469ead03658dfb74535",
+				"lib/types/index.js": "3adc2b1a271d06f3fc2688198fd5fce19185e414e226da39f4a7a39ee711d2cf",
+				"lib/types/runtime.js": "318984bcd709ef43f6b2d4dda7c9a49950078246f7b51b7b621a333a17e0b53f",
+				"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+			},
+			"loadingDigest": "78ad6cd62b85f1405967902b66d73c32f7e70ed427e195e564668c5fd0a0d2e3"
+		},
+		{
+			"name": "@deepseek-ai/dsh-goal-round-driver",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-M1nqf3JW6oOWd4ouw6+fCOkjourUT0TUSeJUE0mj3081ZB9RYPuVvDxvv619yBuaWQMVd0SrnQdWg7yw7W9MfA==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.2.2-rc.5.tgz",
+			"sha256": "463d158abbe43e25baa204f695a0fc32a07dc688500686611f3509eec036d37c",
+			"modules": {
+				"lib/index.js": "8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c",
+				"locale/de.json": "eee8b1bda0342d51221f3319962278d4426c31f5e5bc169e3cee9a80e25332ed",
+				"locale/en.json": "ed8dac74f367173685ff1abb9070787d0142949c84f58ccd212a84c32dc0d73f",
+				"locale/es.json": "fb6b60e704230dc728c1cc4e175652c1103601f89c4be4efaf4546108c8275ca",
+				"locale/fr.json": "8af42f6723ed6e103b97e7e63a50644434d1d634da42325e91916377140738b0",
+				"locale/ja.json": "e0de0bc4785cf9d0578d4a92fc5813cbdceb99e70ed9841e0a7c2b156e50d605",
+				"locale/pt.json": "e1c10d068bef749b1493170b231dfb5e6d4b6c6aac2aee9e3f5577f3340298d8",
+				"locale/ru.json": "35aa0d4fc4c4caa5f67049471c1b810253c4577d08fa3f1f73db5ea952359f10",
+				"locale/zh.json": "94c08744fc2fd682333781b846c6b3fd16057700f32edf12a0dbea8b3c4be6e3",
+				"package.json": "d14c1484b8c662f004061ff7eab82342651d0c44ebbe4391ad4d5e8153121a51"
+			},
+			"programs": { "lib/index.js": "701f82682d645e07bf843f91923182c6b6f358b79e6d477b6cfabedf75074799" },
+			"loadingDigest": "1433f0982d203fe7ae170e036e9218d40eb26ee688e1e7277c7f1bcc262a28a9"
+		},
+		{
+			"name": "@deepseek-ai/dsh-headless",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-wWxvhLt+yg2TzewGLah7AunXi7R5R1z3CWBJlvZcjrEFEZl/RWUAPeetzqemNSL4GmOE9q9dV4grtA2unIIU5Q==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-headless/-/dsh-headless-0.2.2-rc.5.tgz",
+			"sha256": "ef46c188e7a8cb0c146b2909b4947d0389d568888496c534a9e5ba881738e250",
+			"modules": {
+				"lib/index.js": "5625b3c7fb7b0e6334c3e661cce8761004f17ca0877dcc312da75b5b93f05c34",
+				"lib/json-stream-Dc3g2Bl1.js": "b3855e7169b03abf0d747dc672c7ee6a39be4cb019ddb2ba51433a308c093db1",
+				"lib/startup.js": "b1974e90a1385549bdcb083ab000577c894125923c381930da49209ae1255a58",
+				"locale/de.json": "8cd835e1a011ec64d7e32bf5b60f6fc6fe31a633e2ac285d55b429353247003e",
+				"locale/en.json": "70018020739c36facdba19e43f78877bca4d45f1a951bb7aaaae36a26ef7a5c2",
+				"locale/es.json": "42192644310bafb4dfe61c872d45c416c2843890c6528df3c0d329d93f07915e",
+				"locale/fr.json": "6534867888805a4ea79dbebcfc4e268e905de355ae9afacf53142f3bb95ccaf8",
+				"locale/ja.json": "0b870de87e40127ce2d8bbec564cd1b952653bc946bf99c09d644c1edccf4dbc",
+				"locale/pt.json": "d2a6718fe81c52d636ec8e370a2ba42fcaf53f6f4e0d5a1bba1a17774cdacea3",
+				"locale/ru.json": "e8e27cac6b132a5d1c4702243a62b826054d669bbb438de54d3ede9b710e373c",
+				"locale/zh.json": "a13c06b247c4dd75030cf6c8fe39bfe3b307e01e0545f4e4bd33da0ba95bc3d6",
+				"package.json": "4b2cb203d1e97b5678cd504208ed54105ee6fe3572ed0e5ab8dacc404663d29d"
+			},
+			"programs": {
+				"lib/index.js": "ab12e40ee6c5c6a50116949ba797bc7a699b588b51e14f27bdf8c74ee66deb16",
+				"lib/json-stream-Dc3g2Bl1.js": "6625fd20b72c3e3b5cb10a3fa898c35101eb3f26d5433e7ce01b0c36f20afb6e",
+				"lib/startup.js": "e3555367f839ac103c81759cd0d5ee0ff7a573251ae73cb2ed85765b392041c9"
+			},
+			"loadingDigest": "a23d4bf76ef865dab21c47d83fc430d1f6bef11c052a41e84334ebe57fd9b487"
+		},
+		{
+			"name": "@deepseek-ai/dsh-host-plugin-inventory",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-JW8d24co851hmgmMBFfbyv5ItHWwpUFcfrSn8AN2HRVazmngJfQHhsPrWBmfldxXBV1zMKDQyxg8UkjGhXyCpA==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-plugin-inventory/-/dsh-host-plugin-inventory-0.2.2-rc.5.tgz",
+			"sha256": "6d2daa0f86fbd14e0c454bb41701c7fdd568fa9683345890a69dc80f4c51c00b",
+			"modules": {
+				"lib/index.js": "4dbacd5d35857b9682a8a4cc46500a7f2594fbb642c0df66d693e0eeeef75a92",
+				"lib/typert.host.js": "9f9553cde998132628af4152b6d29b43ac6a3a119bea19084e5ec1748215037c",
+				"lib/typert.remote-client.js": "21ae89a753b4cf37acdd3c60c2e2966b0d7e1b35fe4fd9b6b72fd30832d3681e",
+				"lib/types/index.js": "22c80e3fb9d61f5555e1a9ff14d454d5a312ce7823574a68f6c91959e74e0a3d",
+				"lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
+				"locale/de.json": "e16207ae401d0049221affc63745c41ac85ca019dee74f833a61e051909d7849",
+				"locale/en.json": "c16579da05f8f8330e03c6437901628685cf5d58873bad987c83f5c8771bda3d",
+				"locale/es.json": "81ce166a9d1865778087448d88c1011a519b60e9486c24f31739a46f7e86d098",
+				"locale/fr.json": "7de4d425a1e2342eb1b7b1db139392e9279152e10dd0277ce342bf04bf1e7dfb",
+				"locale/ja.json": "b6a5e5a08cc3fb6a707203e904ca095f75f230f6f5bb5e9ce60935c9df6bef14",
+				"locale/pt.json": "8dfee960f4fe201607b28687900c25dd828e85568ae8fbcbba8f1ebfa3a2471e",
+				"locale/ru.json": "5a55cf0c28ef7616e9c4d6afa7761bfd0dd8530571e4bddeeb40cca1a6ca76cf",
+				"locale/zh.json": "d1b18974f7f16a666d3bcf5ce0fe3ac15d96ccc655bafaa909bf05964c0c9b84",
+				"package.json": "433eb22a36abab76c70e8de32f4ce2969c664b2cf753e460ad33dac0f5822a81"
+			},
+			"programs": {
+				"lib/index.js": "a64c9cf34f5ff6e95e0219269b1a2af5ca9abd6daacde5bb0b80bc884cd5ad10",
+				"lib/typert.host.js": "a1d1e3ed9daeb5aade02e49ba80754ec14ae7f196b7e55a095931965094bd4dd",
+				"lib/typert.remote-client.js": "588b8b19edc445abc20051f5e30b14f151c6fea25b93aa396529248ac89b9a30",
+				"lib/types/index.js": "5d297ba889ba196292bfcd937523026352b15a7600f792db4ccf1b875c26b8db",
+				"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+			},
+			"loadingDigest": "43d60221934ab4d104b82396a3cf0d88cfc4bbc841a9abe8a6ae14471f8adc96"
+		},
+		{
+			"name": "@deepseek-ai/dsh-host-webserver",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-eVfh6NE6j2C9ETGUFvM/z5+7GqbGLVysrINXLfofd2JM3QKbN/Qa4gZYNHwDQkR1gm6uG61s4OqrKcTa3kEGfQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-webserver/-/dsh-host-webserver-0.2.2-rc.5.tgz",
+			"sha256": "fd98294f837c99d42d989d8d51cb6935e8cd9989d39ddda93601b817d810a8ef",
+			"modules": {
+				"lib/index.js": "81a85ab619d8977e090e23124fd4e0e135c944c99b8b199eadea615532f2b2e3",
+				"locale/de.json": "8dcdc7faf93cf094c79a4af232ef2c10ebe25daa1f9c3bb5b2ce04de0782be96",
+				"locale/en.json": "ac266b30653884433cefa579038d25827a16b9ed1e2528b8234ffdd3e17ef87a",
+				"locale/es.json": "04045a5d5f7d400603a1d7766b487e2a2f5c05ac702288907f384f863b1c5183",
+				"locale/fr.json": "286056e566c03452e23b3e5c69c84b169253c40936e4ee50d00401fb283b963c",
+				"locale/ja.json": "63bb5a00b6146b941a96c8a93d3134ea239141e4b92923cac5bfb606d1a6320a",
+				"locale/pt.json": "0ba39bf6e80738ccf4c2c5c3f8fa6a3077ec71387f13d2be6442e10f1d840bde",
+				"locale/ru.json": "f2f11d154570ced8354e76817cde4c2ddff31a0e5e05f10138cbff017919ff3d",
+				"locale/zh.json": "6fc489ad3d9bae4d24ce9ad05fffbcc5cd70d6f1d33bd314bcbd2e04bfdf6c36",
+				"package.json": "6bed42eec014744fbef215513babd760a17b58e018e472ce327c5d4768c4dffe"
+			},
+			"programs": { "lib/index.js": "a4baa7c7a7713cb11b108a19ec2575ff161e1ff052c8a1ac2700b79ab06a7c9a" },
+			"loadingDigest": "fe342d784a8e09af4b8ffa7ef8beca01b01e57abe99705e85e121470e853574f"
+		},
+		{
+			"name": "@deepseek-ai/dsh-jobs",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-UBJGkH2d2Ur5Z1ICkB86zz2xJbujW/WipoP+UVnXW3FGcr1DReLVCmJvL3hMGKtggmofCnoZeayqqzaofuAmkQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs/-/dsh-jobs-0.2.2-rc.5.tgz",
+			"sha256": "81bacf434d480f870c0e5af70fd86aa51b400585bff36060b0e5d6535c7091db",
+			"modules": {
+				"lib/index.js": "5a211fa87fba80542ad8591c86ad4be79751d743a683def4355ef0f0fc9c1a85",
+				"lib/types/archive-admission.js": "bd07b6e184331641ca4f9720c2405097b27040efe23d1eaaa1c68dc351ccc718",
+				"lib/types/brand.js": "2a5cca0c8298fe43d0bc3923f5d7b040391e82f978e2421768d3f82ac548ded3",
+				"lib/types/error.js": "2b86d9abe4877d43be1d3714ec81ec2c002237adae485da0b0d0e240ac93aa5f",
+				"lib/types/index.js": "53d4e7e939c9cdcbe97120d664017d89c1ef5a91d56cc37812d246a104e2cc6e",
+				"lib/types/types.js": "f0761bbfcdfd477f36a2fc181d328cc4e1c89b157cabd00426c4151a67b00ba9",
+				"lib/types/view.js": "a83eb92b29b5f9f747211fd0cc66d44dff47784f77a2b32f96d0d6f8fdf7b4e0",
+				"package.json": "d80af5836d1018fcf1c8126aa50d60a922259a744c74696286ec6b4735b3424c"
+			},
+			"programs": {
+				"lib/index.js": "11a8c7c081023572d9e460cd6a425da7b66003c473aa3bfd68fa5770b74b045b",
+				"lib/types/archive-admission.js": "23fee40642c845c02f2498329ee3367908665129d1772c8171d8f59fb32a6055",
+				"lib/types/brand.js": "d09800469dda7b6b692aa47d0001e3013928b753878244488195986307002d67",
+				"lib/types/error.js": "1f32fcb20cbf378a14f5ef21382b8d8a2617b22a5e70b14a5e04d1663740a7b2",
+				"lib/types/index.js": "6992701bda1abe6f58d70315bb00aeeb652965263505d42f0f338bef10a53b24",
+				"lib/types/types.js": "ba8bb16a02cf17594a7084afbb7d48926ba5d135205821dc32e62b3f3fd0d7ce",
+				"lib/types/view.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+			},
+			"loadingDigest": "5ebd1720164ecbeddc0db201187e62030ffba8ab4c8bd93785de9f75d4badf5e"
+		},
+		{
+			"name": "@deepseek-ai/dsh-jobs-local",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-IsRmhM78SD3Ey2HbOR5Ugsn1URlT0jX9rb8PUZ/2k2JP5HKTPU9I6DTZte+WpIIv5KLOnxwh5otnqxZTqAljEg==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs-local/-/dsh-jobs-local-0.2.2-rc.5.tgz",
+			"sha256": "201195dd1d28ae030bb68088cfab3280d0f3c2f830c572fe5e91b988c2cecc50",
+			"modules": {
+				"lib/index.js": "8ff369369641d05999a26872b2df0608ebe7397dbeedb6fc6601fc7ad93a4ec2",
+				"locale/de.json": "3fce155f847fead708e0137fe10698d21b86c971f9af7fe63f1474cc1ed70fee",
+				"locale/en.json": "36793a69c91552933f06f696ff8f1ab9db0c73ccc89be8e91cf115484907eaaa",
+				"locale/es.json": "69eaa26df5278b53df1f998bfec664e0a2c430880451d5d4a45b4c7c2d74e524",
+				"locale/fr.json": "87d03732c17e8e477445af4725c60b370f94642e4ab73f53cbd004cbf8fec073",
+				"locale/ja.json": "11bc8c415e8a9e50f3260d3f0587918df9afac5ae2a47a96c03396b99b9173be",
+				"locale/pt.json": "03db10c6a539d11f815928e72d4b2981618c4e511871f19cbe4686891609e697",
+				"locale/ru.json": "ae087c9dde6eb32586db40539288e9343a222806ae0f6a30584554284b1fc50c",
+				"locale/zh.json": "3e67862596bfc235708f696ecab88dd1868f7772d4af40612d7904f8d6c9b917",
+				"package.json": "5c30381b190c2b34a9d748413b69c2c85565f5cecc0d5ae97cd34e2d15f2ce87"
+			},
+			"programs": { "lib/index.js": "25ef31983b3849ad40b38c5dbabb677889d5fa222e74814daa8967222cad88dd" },
+			"loadingDigest": "059dcaf58394d3aadedd369eb5cf4a6ce9a1f58d2e9a168f810746137e6542a6"
+		},
+		{
+			"name": "@deepseek-ai/dsh-llm",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-zT/KCq/lQ5H/wqOaZH8sa6Uq+9x8du1w4MvbbCgdsK3JA2kxh0T5GEcWcvIvU5s7h0L43tnOV7Df5hZNZ+Sj0A==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-llm/-/dsh-llm-0.2.2-rc.5.tgz",
+			"sha256": "3ec97fce9c4f53404277cedcc192c8dc0205c94fcb4d8a87672f44f1b56e13f7",
+			"modules": {
+				"lib/index.js": "1ed664800193b1ee9906fdb6fb79971a5a2817c20b939d151bc0ec596c5827d2",
+				"lib/typert.host.js": "c4fa1dd96a60367b1c65d2f639fcf77ad4a0483f1159e46fc00768a1d665aee2",
+				"lib/typert.remote-client.js": "cfe47dec917e6b36b6b49278fb42cbc8d99448079d1bd69b15719051505cb592",
+				"lib/types/adapter-failure.js": "f1213f11f11e0f20aae26c09a5e0cf3d72512c1f1519e1b3f107edf64af43c28",
+				"lib/types/api-key.js": "254b774234c0bd38dd759765c0fd1e60788651a22106f5559ec2760a39935f2d",
+				"lib/types/assembler.js": "35a4754ab854055942b9142934c595c3e6358a717947daa2d8d89847aef988f7",
+				"lib/types/assistant-stream.js": "7e0cc96a4d60aed34381b552f9cb4549d70df36dbd28c0630da4cd93fa44b7a1",
+				"lib/types/attribution.js": "77d35a4ce66b4087041ff5566c4d6078d931cbf426dc1fc6e0eadad5bca3c5d6",
+				"lib/types/brand.js": "6b70219e0478d3307d865309523e7e7be3f169b06c04f4eef0d49b54aaef72a2",
+				"lib/types/call-config.js": "170f3ce7c7136b93087e2f5d50faa8b69815894ec3ebdf26c36d57e4c7a17a03",
+				"lib/types/content.js": "f78c96f0575a00a242fce8f696e8cf5b94d3ff802a97fee335bf086187ff89f4",
+				"lib/types/error.js": "83a391a259561cce1390f0f5dcac93609ec76a49a622b8d8ffbecf2aee923966",
+				"lib/types/index.js": "8f3aafd49fc2a82d9bc3c51fa38ae63bab0b8c88ec94b2aaf26dd7b83cbde26c",
+				"lib/types/message.js": "c87812f77a2afd284f271af071575edcadfde3daa7b6554d77b96810ce4688e0",
+				"lib/types/retry-policy.js": "4d9ab1650e8f5a7d6db049177c60321fd711c1d0df3bb0b6b52bc40f0b886643",
+				"lib/types/types.js": "14106d660103de2db746964fbb5be90c5eb2a7ff736779e2501e9faff956cbf5",
+				"locale/de.json": "ef8d484fa753c0a9031c03d217f297ed5e7ddbd0c84442b80a4c8b5636c00abf",
+				"locale/en.json": "e791c79da2f5f24d98e39f118b76a26be6b3114e588acb58ad5bfe9d8dfcbd2f",
+				"locale/es.json": "c6c365e71cb4807f130cfc358ca9446f3b2523592d4097c00b9a04679d5b4d3a",
+				"locale/fr.json": "13914d9e4e3c99454a411b94845bad70450b54724e44152a8e38dc764b65e905",
+				"locale/ja.json": "bf36db57094dce13479e80803ef82a7d264bffb0b7185c85a1759b4e062ac1c6",
+				"locale/pt.json": "100db590b784d53deef4a0b829af69a1fb60eda61aa18ad6ac59e2e1ec016b40",
+				"locale/ru.json": "0479e8a1c2cfddbe7f60a05021d3bbb56ef84be3f03a4005a9e9485a0a2be157",
+				"locale/zh.json": "84b323d718b48a1d8350c9bf85c58de9b407c421a574d4e778a96f5681fdf113",
+				"package.json": "e046b0c1caf2ab232e9d7a4526fa4ec4c8f8dcd98662ed1ee434f408155a1243"
+			},
+			"programs": {
+				"lib/index.js": "427b05bd886522a16d2b844ffc356a80d4c93d7cc819e47c58db1076708995da",
+				"lib/typert.host.js": "70a5ae0c5ed13fe742a887dc2051570c87201db522d925ee171b566124444e27",
+				"lib/typert.remote-client.js": "a7fe90cfa52883eb943745be67b5c34d5d935b7bf2132d2d1e19649076a98a3f",
+				"lib/types/adapter-failure.js": "c571e84e60dd5e3e60fc2ebd7c9b6650cb1d9eb86f5b4cc208b00c2d9bec5c03",
+				"lib/types/api-key.js": "0e10fc8e2737d8f0ce092517d629928df6825c698048bd2a941182dcfd89bc3f",
+				"lib/types/assembler.js": "f8318a579e1276a37823faec87dc8d2fe04822cd59da62615f6c6197b856b787",
+				"lib/types/assistant-stream.js": "cfc1dd13092d98758e4fc42729e738d36ea087eca6780df5e7bd1bf5f7bd86fe",
+				"lib/types/attribution.js": "9df6f49b1459f8e6b51827438611e212c9350feeff16607b7a970563ab11ffa2",
+				"lib/types/brand.js": "74738a90eff8875d2a07900769f7fc3fb7ebfdd0ad2cc59696a35da1d5181392",
+				"lib/types/call-config.js": "2cd854c3b1ba061f29c8de2f1ee49ddd112b2948e2c5b35cf53de782a70c8c9f",
+				"lib/types/content.js": "860c14ba8f081498bee3d17d62c77b92aef27781e31d77b31ebf908a18147fe5",
+				"lib/types/error.js": "61b7a6ab0a0b0d15860bf11064bf230632e81c2d2a3ce308cee50b85d00826d7",
+				"lib/types/index.js": "1d0b7ede7d8d5a575011981323180c39f73a2300cae12e2757efe475d8cf1745",
+				"lib/types/message.js": "c065bac7cc1052ed136aa8fb9db4d1ff0c57fb4940313614ed18ebb18a57eb78",
+				"lib/types/retry-policy.js": "e3432af26a19dae801c87597d1c5f0829eca1d912a900a2ca2255ab0787cf565",
+				"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+			},
+			"loadingDigest": "5df5ac90182310e4ae89c3efecd1583b85c5e7906d65e8504f9a3c26f00b7d00"
+		},
+		{
+			"name": "@deepseek-ai/dsh-official-bundles",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-8l9E9jlqc4aX3UCr4uBJL0BEv0wLWhWWNkBcELvLWVq1o5BeM4IpiNLV/ByjKStYXbnHsRS2xmBD+kT4WQgudQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-official-bundles/-/dsh-official-bundles-0.2.2-rc.5.tgz",
+			"sha256": "fe3bbc2c3bfda7661e090166eb47748a10f134119b56f743bb1a03e2664d6d20",
+			"modules": {
+				"lib/index.js": "8ab7b656752709ea805c186f19b85219e974655a8d61b07146ff9d38aa0ae4c0",
+				"package.json": "168201555aeba4ada6fc7c509e0a6cc2fe0e1fc87faf4539a2433b42de0ea533"
+			},
+			"programs": { "lib/index.js": "007847844a5b0a352801ba5e3b345bd298192b94a6b0fedd5b26f16046420dc4" },
+			"loadingDigest": "7e4908cd5dd9d62f6b3fec1ab7630b225150dfda393470a3c4f925224affff8e"
+		},
+		{
+			"name": "@deepseek-ai/dsh-plugin-manager",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-E6Gw0DydPk2uQTpsscGA/JXO85SGKkw4PJFT7dnPvieO0P/9Y91V3c+mFeSl3yzOG8JfbPw2pfylsfWUeN2DSQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-plugin-manager/-/dsh-plugin-manager-0.2.2-rc.5.tgz",
+			"sha256": "d96a9ba8d02556efd1d893d125b0d9e2baa9bc92a5c6b28940896c8a9eeb0962",
+			"modules": {
+				"lib/index.js": "33cbad2bdce9679a9f4fbebe072db87ecbb162e0ceb93237f6a627de07d3ab74",
+				"lib/typert.host.js": "7e10ba8c4320185f638e80b4c152159d9e99ab43567ade3a77e2514788ffac30",
+				"lib/typert.remote-client.js": "6c26d24addac16bf3259de35c1150cb3ec465b785c5cc23c9609ef93304d77bc",
+				"lib/types/build-approval.js": "5ffe2262501c630063e4b6d364172af7ed0c3264b753a47795b23dd7b76be963",
+				"lib/types/bundle-detail.js": "3d175a7bd42608e29d681d829b85ec288feb64d1a8fb49cb959d3b12dc5215dc",
+				"lib/types/diagnostic.js": "53b3636fc7aadd46fc1faeb7c01531150cda82d66dcafadacdc2c12ca1d1e477",
+				"lib/types/failure.js": "55d33bddce5a545f821902bbefa6a58053715227f2922d8d7451b6c5b7ab44a4",
+				"lib/types/git-transport.js": "280e1137d10eaa64385c31ccaa0515da1faa86fd6c3e14670643dea7dea95e21",
+				"lib/types/github-connection.js": "b998f95e854e948c78c61546ff51b9c3af3cfb1c0faab78d2f15a55d5a7460cc",
+				"lib/types/index.js": "b6b01310227c09567d171aceabd15423ec9da070db0954023e20947071df1181",
+				"lib/types/install-failure.js": "c9436f33805b361650ac3cb221b85eb3969028f37aa6e85e1627d38d4aa7089b",
+				"lib/types/install-spec.js": "9f56a95f0f289fa45dd2178ace8e0a1ee7a46c222714bf5636652c61ffe098bd",
+				"lib/types/official-install-target.js": "2356f3c2b0182260de9351d83fc3bb6a982ea82c1d049c27408e24a009155fd2",
+				"lib/types/operations.js": "323d44253a48103e889360204f4a37cc03846c3a6a9b56057fc2d11b2986b545",
+				"lib/types/patch.js": "8ef0de60d03c8cbfc132b8560118e1cb817345381f072c9cad215f2654702626",
+				"lib/types/registry.js": "9b8e2a742c989c4741dc4e5a2ba25a00b305d71b5eea90213d24a38ebb53ae5d",
+				"lib/types/run-tree.js": "3e65f458bd298dd2d3a8e3b48b30d771bb8e60a097bc2e6e924dad647f953e4b",
+				"lib/types/tools.js": "7bd2398447d97b4c1128ca387bd1b51c1a587e1a8837af510f81b752baca3159",
+				"lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
+				"lib/types/versions.js": "2aadf5119e3095e097fd22629a90de012b7a3ea97a355c00c791ae1a96613b54",
+				"locale/de.json": "b50ca256cb331297a8fcfdee476825bcc5adb4ad1d496dbfd2044a52fe987c67",
+				"locale/en.json": "3c1623fd609cc381a0a21b94e9ab786d266da3349bc3e4f1d7ccb7fbc8e14856",
+				"locale/es.json": "a0ec8103fa783763cada0729a0c8845719d9fde18ac35a648593160bece9c9cc",
+				"locale/fr.json": "cd3dd0453635009511b3238502d5a9df901c2d34c0b1c4e339e73f79f9903c83",
+				"locale/ja.json": "5e4cdf220f25000f2c83e64eb4239b21336218251cda8979d97b33fbf1bba18b",
+				"locale/pt.json": "add611dec700699d31300d4ea9e9505ab1295b83dfa033c4b07ae0bb6faa5d15",
+				"locale/ru.json": "cf49804ddf19e2fd77df16be6a154e90f38f5c3edb8ecd922909d516fed8928f",
+				"locale/tools/de.json": "4aed81b006cd1bed8a54ecb6eccc2c30d93faa0a68b1e940ec2c3d6c3a226d81",
+				"locale/tools/en.json": "e87ed08a92fa10143a7a78e78dfa8c18a69ba063bd8f36e673091b2d8604c27b",
+				"locale/tools/es.json": "b2a2c038166fb7304a39573bd1a61215b55b90edaaed808c093fe39b4fac870a",
+				"locale/tools/fr.json": "52434601b1de9dace6160a0e1bc75a9049b452ca945e6a7aff24d65393e4941c",
+				"locale/tools/ja.json": "2d8e33eea996477c898175647a902cb9b1af619c7d55341fcb55699aaa227f0a",
+				"locale/tools/pt.json": "749f5074e9ded9d980f91b8f7969c88136ccb3aeccb7b7962c73dc8a97ef0d1e",
+				"locale/tools/ru.json": "5237bcc3f399530cfe591594bafe5711e8ddd22897de9b12cc5853bd4b25b8df",
+				"locale/tools/zh.json": "e52cac2c66ca2f93bafe6c83fc8393d0f2c51e67c4c6dd3ac438859bac772763",
+				"locale/zh.json": "a3ea0911b464439523eb61b04c68abf6d10f50e7cc5b05e600423e40788a4cb3",
+				"package.json": "5839d45b0ff5ba5e38524db1947e755a0cb8db8f51313c779fab14c77ddf61de"
+			},
+			"programs": {
+				"lib/index.js": "661da73b3175fb75a8abfc8ed25b33fe31af6dee6a74998c8b087b34c8f726c4",
+				"lib/typert.host.js": "c1ef78e6751a6a4a713a795b99ca77bb012bf03e5b6170f361c3bd897827a2f8",
+				"lib/typert.remote-client.js": "d8dec8bf628b72f026cfac8fcdf762e1450a0346a6a04f1954531df2ce71db0b",
+				"lib/types/build-approval.js": "2249f7968470551a5b09ecf28f2d1ba823a196d2fad9db8fe273bded95b6dda1",
+				"lib/types/bundle-detail.js": "e775dab3347dadc36aea7cece18f515a603616858782c7728f8d82b5adba3f6a",
+				"lib/types/diagnostic.js": "71aa4e154525b8213fb9007e4e5b7df42dce9f76df2ea8e168c068e4fec46298",
+				"lib/types/failure.js": "7572802aeeed1c689370dcbe1edd4eefdff451a9bd78310a7f27c02ffa3b891f",
+				"lib/types/git-transport.js": "923f45224cbc3762aa4a77e65ea93066c7343b463d19b1a9db8c21cc3ab52a79",
+				"lib/types/github-connection.js": "c9e43b8d2514c6647bc5afe5bbc11e9df37162a288b98995dc572557a227aa45",
+				"lib/types/index.js": "880974d2a33865485783cb0f8b5622f1ac8e0f674bf4112f56916639c7aebbd1",
+				"lib/types/install-failure.js": "dc5db07cd2ec75a22672a23e2d9e2e7c9b2ca30585053e4f82ffd8a3c7bad874",
+				"lib/types/install-spec.js": "d90481e5bac10eb591587dffe39678a25a8e2df25122e660a7d585ce39fc7d24",
+				"lib/types/official-install-target.js": "e5b800562124477d7a15d2cc94884d982e28a68a7ac2b8b923bf14e5c94859ae",
+				"lib/types/operations.js": "d4ebb3efcd226c8eed5a74bb10991616a3cf83b4aecec272130ed39790d755cb",
+				"lib/types/patch.js": "0e8809bc914aa5cd596a18908aece0473ecc26a1f0533e93305d3c588218a033",
+				"lib/types/registry.js": "ea79cc0de53100722bfbb0159ebce8a1116101c8d171b974f97775fd2d2bcad2",
+				"lib/types/run-tree.js": "f8be76dc4b9890935c4db2e636774c0a2f30576beedb1c2fcf636d86f68903f5",
+				"lib/types/tools.js": "fb4be994a67832d699276647b17185035494708709b13cbf1661d95056c8ec42",
+				"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+				"lib/types/versions.js": "4770a7008f64f8720e7f1f2512ed42f6ae159889b5479514ef84ab4240fbad39"
+			},
+			"loadingDigest": "3696738d3bcb385e64b152916a58946c427933417db407769bc63c3bb2853039"
+		},
+		{
+			"name": "@deepseek-ai/dsh-ptc-runtime",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-cGuKWW0ZlHcwtEslRn4kx09WwLK/tc1YDrGt5eW1mhOl4uyJQxBjMrf3KG9MK9jSrwIP0J7jTlwLRRJQ+XakQA==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-ptc-runtime/-/dsh-ptc-runtime-0.2.2-rc.5.tgz",
+			"sha256": "79be8b3a99697d58d033f32a6ac33180d897d893689a2a38bdb999506c0a8b0e",
+			"modules": {
+				"lib/index.js": "e9a6a04b2632ee737a733e6f7ba0c45586120c881a43e0ac4470bc46dab5a411",
+				"package.json": "91a685e1a1463fd26f6e8c55b9b0d5be7d1334f4c7fc3db0f2b4710bdcbd1502"
+			},
+			"programs": { "lib/index.js": "49a52547c546d1319649ebd26da4ee69549ab69cc0b2fdf28c76833431937660" },
+			"loadingDigest": "107b200876e04716b9b0a9875ddb00aa6517fbaa1a82469d7b38664905e7763f"
+		},
+		{
+			"name": "@deepseek-ai/dsh-pwsh-local",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-J1/LFkB4yzulRvoe54GQ7jHzZIkDRw3UvYB47KS3aNiPSEkF2Wlswvj7yfMHYwt//65IMW5bHfOxmJYEQPIFyw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-local/-/dsh-pwsh-local-0.2.2-rc.5.tgz",
+			"sha256": "dca8b9ad06545d61e069daeee4f54135e3643234fb66617f0b2f40f789bbb61c",
+			"modules": {
+				"lib/index.js": "8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e",
+				"locale/de.json": "85d180ef2be78ad03b4fae3824659203c5fc3388dd04097a84f6361f1b6ae044",
+				"locale/en.json": "79287b97f2773db967ae0a212d269a1100856f0191aa384319acafdfcfe62f6c",
+				"locale/es.json": "8738cf3c2bf7fcedfabbb001ab1fb6e5c6e75d151fdcd32fd408f035485ea29b",
+				"locale/fr.json": "135f40c715a0fa2a5fa0c66aeba475d9180ac808dfaf24dad4ead1df95b196fe",
+				"locale/ja.json": "df242ad0277ea49057139ca8d4ee74c85c2deeb78a4ab11abe293a0a82595374",
+				"locale/pt.json": "14bd4b78abcf90a040d69dc4e97009bd8c9992a272d2f99b6857f476312a1673",
+				"locale/ru.json": "2e9d2ac3a27f949fe5efadf03e840689e81fc2501d49f7e040d64db8b078ccfd",
+				"locale/zh.json": "e09942536dd47bc149f1fb519eea4d495c4bd78a246a103115130628a94d1c80",
+				"package.json": "9469a2e3c961c46fa9c69ae591f3ee96c170e1c5a4fca2608a361a64babc2a58"
+			},
+			"programs": { "lib/index.js": "4e2cb7f3aeaf7cfe3380c9fd7b0b48c06313060680bd9fefc639aa2cdca67fc7" },
+			"loadingDigest": "713fb8fcb279ac8e9f55ef7cd33d476d309859dd273ff050e78f98a320c26bbd"
+		},
+		{
+			"name": "@deepseek-ai/dsh-pwsh-sandbox",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-ta+3LgEK+Q+gholEkYqXg6IckWA7j4t1+Zgn4Oxb9CoeXooninccJLW5HRh+mGM+Zzjv7K+iVW0zrQuodeYBzQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-sandbox/-/dsh-pwsh-sandbox-0.2.2-rc.5.tgz",
+			"sha256": "b8bf6f2949657af9e534582a9cf7cab11a83b6019fce468f7a5224e1c2b3e226",
+			"modules": {
+				"lib/index.js": "bed19d2cea875b152f9e811116b59c2a45e6711b1c6cf1d8bacc4d20e15c6783",
+				"locale/de.json": "0278f91a4cedc25f7c9fe726d80d7323862aac3eca3447752fd91e6709f4c430",
+				"locale/en.json": "8a0fbfa0fd6192746150fcc54f9303d292493706a438d7b172ed086e1e13f7d6",
+				"locale/es.json": "67b8f6fb49cbe94e5c2465f4b5bba6b7de0e8c08b7b7dfccd00b140cbad1a42d",
+				"locale/fr.json": "d0bda81544015f50012e0e7f9846d88346243365c402f0b9faad9d4b6fefb1a7",
+				"locale/ja.json": "cb3adcc982f854e2eacd8286538a9f4352ad0779c69f3ac95f84f6c9a71596f3",
+				"locale/pt.json": "f909f8c62da6457112631b13b69b67cbfb704f03332480fc3269a317bc51a4c3",
+				"locale/ru.json": "40b0eb2007e78bb1322517ec43f10a8edb3272d194e7c7627e345724d5aaed5a",
+				"locale/zh.json": "f4bbba766e96ab4ccf29d8014345f544f911bae3a9150ba34c0dba67736c5330",
+				"package.json": "367d49972d8ca044b5ef7d4dc190dd97606abde1d60eda2a10183c690c8319b3"
+			},
+			"programs": { "lib/index.js": "23755f4bc2a1797364c319e7a7954998925e39eaaa7e3bb223c7b15544a826bb" },
+			"loadingDigest": "2ad697735e7c971ef9bfacb0a01084af419aa3af578ae47528474510f4efe56c"
+		},
+		{
+			"name": "@deepseek-ai/dsh-sandbox",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-TSxc+HBxWXUYNak5e9h+qL0AmjJSTsTe8kxJEKbAoRhZTVZqE+QfMRF8AGmt+ULM9fottd21Los5wgckJpjftg==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox/-/dsh-sandbox-0.2.2-rc.5.tgz",
+			"sha256": "645a160241211cbfcd69def6b76af80b468134f4d123428761c55a12e3180172",
+			"modules": {
+				"lib/index.js": "dcf74e4cea1a0dbd8bfeaa1b454619b55aab83f3b3b761f0534165f0ac05f138",
+				"package.json": "cda846811d162d9336f41345290cefa923310873ef27df7cf1911d07d3cb9e4d"
+			},
+			"programs": { "lib/index.js": "0aed3a09d02a6abb1e40b0444f3c94df181abb4a800f20cff936689471540bf3" },
+			"loadingDigest": "cb5babf871ae70e924aefb1ee49f315dd3d5db1bb8a64e7fa65ac661f4f80feb"
+		},
+		{
+			"name": "@deepseek-ai/dsh-sandbox-policy",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-tk68JV2em5UOkVlXUrfcZJbSp12ncQJZ5nuJbBrLtNIr5tbnVBx3Hkc6EBCnBLNeRaK1QvMaca+OA3GG4YglEw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox-policy/-/dsh-sandbox-policy-0.2.2-rc.5.tgz",
+			"sha256": "96ff8166d87eb33b20a27e2b73da4dfd9cce2747fddc11eb64ea844c603d60bf",
+			"modules": {
+				"lib/index.js": "6c229f24f4b9ad67790ab5c8d1695e1ed538c0354955494bedd0dbe836debec4",
+				"locale/de.json": "54264980f0feafe0872ee1a9a0dba54c4a9b88416f9a5b6ff8c27aa881d35788",
+				"locale/en.json": "a7f4e8c7cbe53690d2b0626494bc6c010e6d239eaa871666547d562f5f824001",
+				"locale/es.json": "4edbdb2e11c558c3e05538570c3525cc6a4021b7c876c089d862888e5dc54a1a",
+				"locale/fr.json": "dfc458c94d06d039bb36426307c5787b191933a96f9297ec77b748953cd01f36",
+				"locale/ja.json": "a0114025e7780765c54e8430d9958c2824ec435fd829063e71b7112ef1e2f380",
+				"locale/pt.json": "d713d04d71c7baa69ed372450dc4e1cc7f938c2e3eaa6459f171a1a4a545b6b0",
+				"locale/ru.json": "479a9697c43fa73d3a8795ba45aaade3638d6ee7d1309be2e7a98b0eb43e3102",
+				"locale/zh.json": "f450c9e09799ab5e5eae37b2591d44a607a91251a2db69b528f36d3dbede707b",
+				"package.json": "0d939d5fa3a6ccad25d196c3822c39f39ef4687b83cbe8e4b23aab62dd7068f5"
+			},
+			"programs": { "lib/index.js": "dbf8981bbc05fd5c1fc8a791b0187fbb3d1545c5e1f235e203018216be150cb9" },
+			"loadingDigest": "5f654d60efbab564b675186671a6a6dc9ae80b02a1baf1f38e01867312a26451"
+		},
+		{
+			"name": "@deepseek-ai/dsh-session",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-77+MOBnQgwjfR1yPkLrnS2nlRECa0gfUt0jwMuTg9FniTz5ca8854m2jmi2F3iHDnQUt3lTwzmy0BLIrok+lZA==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session/-/dsh-session-0.2.2-rc.5.tgz",
+			"sha256": "5129d653831dade9f21663fc18cd416e92e37ea47fd04cde81ee2066de8fddb3",
+			"modules": {
+				"lib/index.js": "d9911b5e1585bcb142d03ce46eb2990b3fc7c254de5a76d3ffb124bd2469216c",
+				"lib/types/fork.js": "72ca7ae2cce506eb607e565f2e6b15fc6e3c2663de8403f79e37fc3a469e34cf",
+				"lib/types/index.js": "1fab1e6e7e2dbcd1c3a43d563e5a322d8f32acc1fde79a9b4971de8c59e30345",
+				"lib/types/known-event-types.js": "204c222ae2ed64a88a750fd268f7c31e92e91b4685137c379b4ce257297bc56d",
+				"lib/types/preparation.js": "78dea29f5e11a4d220945a572b3eb26cb66460e6a368a423bf597c3ef05a5faa",
+				"lib/types/repair.js": "ee2e02d4e924bf01af621c38c27e030b89eaa8e0abfdf801a6220eca95aa2038",
+				"lib/types/request-header.js": "3f73ee59af794df50df159a9c45c606f0fbce364c482b371831d1e8f26b87aea",
+				"lib/types/seq-ranges.js": "68a127c76affa98edeeb50e302eb43f154f4d24f7d04cb95ba8b323e88f3d09e",
+				"lib/types/surface.js": "1751d34a34f53106dcc8d5d8e816d04878bc4cc9365722c6c50c2be67571c352",
+				"lib/types/tool-history.js": "2d2c4f4cbb6717aa2f487af52ce6a81e2002ce2c768cb5a4210c867ec49a0e95",
+				"lib/types/types.js": "91723a2522999e2c8b6c455796ad699794a6f0abfcb44d9cb883edb13142ff9b",
+				"locale/de.json": "8187d4ef073ba7f2cdcfb47c31225e943489db53f1c07da9621731f3948dcb42",
+				"locale/en.json": "b201655c72e1dc61d393b46dae7bf5cb45463b8f94b2db390c98dc6f78210e28",
+				"locale/es.json": "5c5372f5b30af2ded8523a6c62bb4035cae6ad8f3a77d3df4c4f710329e2890f",
+				"locale/fr.json": "83dc8e3c8757bda2871b46cabca57393b8c8f337bda956616faccd1f811b7cef",
+				"locale/ja.json": "6ac8a9e9d326b0f15fe9be991bf9de332fc1d2da9e94d1956569ea15a9048eae",
+				"locale/pt.json": "fa9bbd95c41f757f027db0832bd8e4b5af36aec30f667fc6e46fafe185168273",
+				"locale/ru.json": "6d5c34bdd25f5d18058639924977c55b4091a59b1a99d139ee3a0ec169de0930",
+				"locale/zh.json": "705afb5363274b498b805fb013311970793f9fc355dc1ad13995e69dc5a31ecf",
+				"package.json": "ac1ae38d628edb18fc20fbff52689e6cd2a68081a8e02420dfc33734fb85c00b"
+			},
+			"programs": {
+				"lib/index.js": "73bf8476dd27179e942cc1337c62d60a1b7dfe0d9f4904fa39390f8e141d7789",
+				"lib/types/fork.js": "3e0864827e6549c55671f223ad42f155edaf4fef0268b2a203db7c60b15c7199",
+				"lib/types/index.js": "24daedea31de4423b0cffa40f51805285298639077234096012482668bfcbbd6",
+				"lib/types/known-event-types.js": "10c5f6f73aaf47f1128385ac447927b1d795073696a3dc0f5574212552317d98",
+				"lib/types/preparation.js": "ecdfaae0935446a69d242a0b9c77ca62954f8c68fe30dc0e3a0b858402023a8b",
+				"lib/types/repair.js": "05ccaf6d1fa81e8715a34a8d82317e91f714a399067dadd83230c3a84d8f1b20",
+				"lib/types/request-header.js": "39c9649ebc8c4a51cea47a67398d904b80bf81d6e03f0dea0fadb1cebd116f9c",
+				"lib/types/seq-ranges.js": "89edd0f398abfac359eba0130c9b1f525a363c48a656d34edabd9f9aaea8499d",
+				"lib/types/surface.js": "335c2c2e4df983e385a89bd89810176cb260e5f3bd7db85df2637df25be5f8df",
+				"lib/types/tool-history.js": "daa7e0e3e791f1b7001ab5567376faa493d9609ca5899182f258c43dc4d84911",
+				"lib/types/types.js": "10e24b6be50f234352ffcdca6d57c0c185ba64843b6db2e1bf1e3286abf0635c"
+			},
+			"loadingDigest": "f5292a945a05cc412f4bed3e494e218f74cda2d72ac6ab576b63edd20cd61396"
+		},
+		{
+			"name": "@deepseek-ai/dsh-session-format-v3-to-v4",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-XHAWfERAsMpfnben4oqNaDQ6dQTLh8FAhNRTaK+gVabruxjVc61xEQI/Ft2P2RhH5FFBVKl33+Xhz/JAbQAPDw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-format-v3-to-v4/-/dsh-session-format-v3-to-v4-0.2.2-rc.5.tgz",
+			"sha256": "8bd67e9c5ac11fbdcbaaf767461c49a106031d2f5157695c3c742db6076bed93",
+			"modules": {
+				"lib/index.js": "da0b0c2e1460316e659f48f4222730962046b3634d1fb634683bb7243a7bba80",
+				"package.json": "c087ff37c872e5efa4b07238e3d32475ffaf61d76290b8df462fd8977ca417d5"
+			},
+			"programs": { "lib/index.js": "f930b415ed2f160f98b4c84e33cd88d2e981244087a5b12dab591fc51d592127" },
+			"loadingDigest": "c8151e4b019845a508eef9c488b95fe9b39e67f09d2b37b2bb30a7f205476e10"
+		},
+		{
+			"name": "@deepseek-ai/dsh-session-persistence",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-YqvB0p4VbHol+CDxH5ZOOd0qwzJL69MgbaF+srobkvq7Mu8IF0Q7lBLIYSMfeFvmrZgKwsKMV9YJjdAJl25yRQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence/-/dsh-session-persistence-0.2.2-rc.5.tgz",
+			"sha256": "c1af659eadc256c0d6cfd4867830efc7314bf19a804cb8ac16a247f3cb0459b2",
+			"modules": {
+				"lib/index.js": "cc0b6d3a224133af611b428d5a49020e300f86c3b4ba28037aeb219029bde3eb",
+				"package.json": "fc71193421409031ff138183a46b8b8bb19ddc82faeb3e4266b3a13aeb0523f4"
+			},
+			"programs": { "lib/index.js": "9ba15ebd7b22c52163c672b518e0ea1a2a2c23662695cc932e1f3726cdd51154" },
+			"loadingDigest": "a896dae494e86993f92704dd38e16ef2ea7da4c4ddadac2dc244d5653e9da685"
+		},
+		{
+			"name": "@deepseek-ai/dsh-session-persistence-jsonl",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-2uXF0ozjkbjTgK3IG/P081zmnoS6FXXTdGx6FUoP8WN0gwdMWs8F28Z4Yr8fdAIDWEvkCeOrXXrlv2ZAFGf0AA==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence-jsonl/-/dsh-session-persistence-jsonl-0.2.2-rc.5.tgz",
+			"sha256": "b3a758537197c19bf28784a66004f9dba8ac34d10bc1315eacef8755cb29ea9c",
+			"modules": {
+				"lib/index.js": "69efef5f84dddf947032bc1425067878fa610416c8885acde2ded9b01230c9b7",
+				"lib/worker.cjs": "d327c584cfa2730a9a0fc4e98dafbad36b59d55ba1456798dfcd3cdffa7525ee",
+				"locale/de.json": "513f194372a1a4d1197ff36c073e5be275c73da0381dba30444fc00a1cff4426",
+				"locale/en.json": "42954c226713cf426aad6999000f1e92c03c766e78dfb266931dd84bfae94a8b",
+				"locale/es.json": "e4c251120fdbcdb2f14dacee79587a81a9a664eeeadb7d0610a2fd181ef8ca08",
+				"locale/fr.json": "218a88172c9602a5e4fb7cb9ee0f99967da551f65c8c64eb7c64f6c2156a62f8",
+				"locale/ja.json": "04a12ccf50280430a84b19c9dbb0815741503f127ea01e5ae9e3e0b734da9647",
+				"locale/pt.json": "81c25f5b97f0fa918fea6c2c37ae36a33399d2aa59161b8d130844df0e6924c3",
+				"locale/ru.json": "7b6a32cc346dda2397f93182b32a1f620830db54243255736fcfac14369ab4cf",
+				"locale/zh.json": "35bc0cb94928be56b65e04758ab21b240160385d9046698f54c84dba3f4f51e5",
+				"package.json": "ce8d2e8c745437a06e33ce6b4693013fcf6d05f474c0176c3fff26c8f2ea6c92"
+			},
+			"programs": {
+				"lib/index.js": "89c0b58feba36938492d4415557999ebaa8508814e5e8b19f3d246a82ceef61f",
+				"lib/worker.cjs": "9e1f9d8059ef68fbb17083ecad25482e9d62dbac3a8b9e029c892d2d398d8aab"
+			},
+			"loadingDigest": "0cfea25397962adf48394fed734d1cfce142bc93ca039afe47f0da1513d59e56"
+		},
+		{
+			"name": "@deepseek-ai/dsh-session-projection",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-dzkbwhFy5AXFu+FhT6QBLb3lQAozb9Vkuh2zujita6iceFtsQtxXBGiXYl4D9Oy1eLRuOQdlUCmW6M/h+LxoxQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-projection/-/dsh-session-projection-0.2.2-rc.5.tgz",
+			"sha256": "f507451a20291d8e20fc959c43d7067f01084f0d63c290b96a8a8f2219d2973e",
+			"modules": {
+				"lib/index.js": "6ed6c37be5e1bea75b0e8b01c4a58fa819297d25158107a6e051d4048c8f601b",
+				"lib/types/index.js": "25a46be7ea43b53ffb699cdca7d49e464d2b8c4463a6c067f6cbda26948b24e1",
+				"lib/types/types.js": "d6b9f7a57fe4dacd7b1a6403a34e6cd1ccd088c2e024e02cbf577166faca6ffb",
+				"locale/de.json": "30d9cb09022cc88c89f9c26900fad006a130b9f68538db6797e55e867779e97b",
+				"locale/en.json": "b2291152e4c6893bfdaeb54684da9051279a02991147442753f39ca06410a408",
+				"locale/es.json": "77f6278d57bdabb945298786082fa48ac37094438248f7b200caee08efabe931",
+				"locale/fr.json": "985c24e083bab36daac6e3482d14a07e13d176c30269de8bb3538cc92509fe0c",
+				"locale/ja.json": "70c9315f5802b8bb4d1ff4a634ecbde21952fa643de7a1650a13810b9bc254af",
+				"locale/pt.json": "54d417ef2e6da3d7918b9bc69970325da3253d0bee2e31fe29a037a3bde5c54b",
+				"locale/ru.json": "e3082f46031929065a25f5409ba6006a7851d6f5323f553aa34acd2ef6de1405",
+				"locale/zh.json": "04926d4f04844f0c8876ae866ba30b73e11b7bdec36077505aa50eb49d86645f",
+				"package.json": "204cf9db3faef1a0d6e87acab090f1b6e8b9081d5950a0469846355fd8ce85b1"
+			},
+			"programs": {
+				"lib/index.js": "7856417c0dd5d039a6370b57ca596e22b1008bdf37d3cca1cef382d683561636",
+				"lib/types/index.js": "f5f83c2ecd5208b5c122fed89a481eb372ddc2efbd1c4235cc71dc094c10012b",
+				"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+			},
+			"loadingDigest": "d242b06ac0a74e4a86d3a74b523f1e3b2c9d0c66e7737fe911cee514e2488ddb"
+		},
+		{
+			"name": "@deepseek-ai/dsh-shell",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-be1fmjMCL1QlKOqA5j4b2XlQAi9XkBZbtRsUDhknzA2rbFxQKRozKoPcHht2jKUspQPPBvgdBnqyPhlxwFLtPw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell/-/dsh-shell-0.2.2-rc.5.tgz",
+			"sha256": "2a8e5494b9227743d2a644907792da152bfd0a9b7fb47f18ea740a53a2370d42",
+			"modules": {
+				"lib/index.js": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1",
+				"package.json": "3e79426649e83e919690e346a2703216b75c6c6244713097d4bd2ebe8d7cfe22"
+			},
+			"programs": { "lib/index.js": "acac3b2a24b6341887e38401f79b0c311147d1778c0dce9847801cbc3aa88c93" },
+			"loadingDigest": "4559308c07d74a8562b5fe1abc3942fc37b6fae00d770803f6b1c99d04aa5253"
+		},
+		{
+			"name": "@deepseek-ai/dsh-shell-env",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-Beiv4TDWdNqRZ9kuNhG2rU0MiZSwdaypY7PWTT3Q1sK2Aq35LVaN8Va6jbJvuxjadlryAuzASfiz9Kk/t85iGw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell-env/-/dsh-shell-env-0.2.2-rc.5.tgz",
+			"sha256": "ccef8b8b35413b895a4f7b4cbec37bf925cf3e3745f2f815b2984e82422e5408",
+			"modules": {
+				"lib/index.js": "47028c8ca515b5d31989ac269d2051c9f63250d64573b1b6a70e00c3304ec047",
+				"locale/de.json": "cedbe637cf822d2b6e2e88309389a2cee61e5950e88d915335ab7aecc87ff070",
+				"locale/en.json": "a580afbee33c696acbf55c8c20933b17289f45de40300f5182d2c9bd11a9a3fc",
+				"locale/es.json": "c65c5649c280438a4ffcb3da38a9390071f20def74f68800c00839113ac05cfa",
+				"locale/fr.json": "4654cc0769bb83b794f377ffb1e3f9818687d5719ac52eb75f50e3e25d798d2a",
+				"locale/ja.json": "a0117b59ca758a678492d8f25649bb7f033d16ae659994ccda4527cb3ae9924e",
+				"locale/pt.json": "2056633d9dc83f3db956ce62ba72edb7ef5a7113483431d1f7ace80f0f3a5033",
+				"locale/ru.json": "5430f9c3cc2b6af0c4d45162d57d15a7f40dbab0343e64ca2a101a6dbca98aea",
+				"locale/zh.json": "7770be6a8b7cfb49bd6078801c0bb1366e2ed257782eda050e3acf9eb80af37a",
+				"package.json": "4b85d86bb8c91b34bc06ac52afa528ae0934c6812b53e2b591234a181bd43705"
+			},
+			"programs": { "lib/index.js": "31d3bf0962757c486391754d3b99b856408a16c63b6c94de3e50312f4539db0f" },
+			"loadingDigest": "56eb109dd07b90923de4d161cc71672041010bbd6e272c604141db6463ff4f89"
+		},
+		{
+			"name": "@deepseek-ai/dsh-subprocess-local",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-jEdSw9lQPfMkfnxnzEIJQv+4u+LdojXxiAksVTuGzyN5xxssRIVu82gb9xBZCjJjWAAKtcysbVk6ez7+kV1YLQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-subprocess-local/-/dsh-subprocess-local-0.2.2-rc.5.tgz",
+			"sha256": "d796005a62fba7470992f25e918be806bdb100ef754f109472277bf2eb27b116",
+			"modules": {
+				"lib/index.js": "152b009a77e0b5f846af5a86b25a35346c9aca5f380c82054a35bde722500752",
+				"lib/output.js": "4f77ef6da608d36df168c99177e9b527e7145df1418845eba567635e64a4c2a3",
+				"lib/runner-launch-CKTiL8M8.js": "a6f39eb3036497c1b3add94cf5eba0eb0c4f94689059fb98788de9bbc0fee0da",
+				"lib/runner.js": "d1c2a6c48e2904813737b2221182fa1979ff23de570775189f86bc1924ea679e",
+				"locale/de.json": "c3cff46f5f5cc745b2730164e39b1dbd8c01ce62e37315a368d3ccec22716436",
+				"locale/en.json": "06bacd3af14eb50d1a4bdd63dd18e57188a6da43bbb4dcfbb43bcf3d566d3163",
+				"locale/es.json": "55536426cac719a34c9fc077ec0969dcab075d8c6a57ce2c4b39f823f42b14dc",
+				"locale/fr.json": "44f3e45774ea88bd92c5a95262b9ad350b0b809aff8cb304669b71c0883d10f3",
+				"locale/ja.json": "7ef20b81a2be3761e86c263eba4c265a717270a9d9ba4389bd4848a96be1e11c",
+				"locale/pt.json": "509e91115a11ebe20516415498a60207b0c52f431f016cb132370fe9e8bc81fa",
+				"locale/ru.json": "c67252e0f6c902897ed0bf400dc6be87be61eca44ad089bdd7b7e8b8caa1f9b6",
+				"locale/zh.json": "e8c1329cd69b2a75aded5dad32f4c4008e3f96922e9e4c952afa4cfb5eec793b",
+				"package.json": "bfd911899d0d42fe1af4cf68b37683f26c1b86e8b33f186884851257ab830463",
+				"scripts/ensure-spawn-helper.mjs": "ca5509febf1e6ec1356df121835ebe5ed2f9cace4bdc2ba6d83d41c7e45e0f1b"
+			},
+			"programs": {
+				"lib/index.js": "c8ad07b1855b18f66cca308089f17444ef75edaccc4ebbe9e1a505810181d098",
+				"lib/output.js": "847fa903d1373f700f9c3455c93432e35052bbb93eb6ebd57aeedd82a8e291d7",
+				"lib/runner-launch-CKTiL8M8.js": "ccd3f325643bceedd03278f8ec7622849d0d02a0987b8ebb37b262d85a471a4c",
+				"lib/runner.js": "766c00e09d39502f93ab9db895d2e057467d8b654916a50278e0ad152cb878a9",
+				"scripts/ensure-spawn-helper.mjs": "029255dea2faa10541345ddeb1e55748c27e058aea3d43c0bfb6cf47a6ae954e"
+			},
+			"loadingDigest": "ce43ef430390860b5dca1ad29a58c8dd2a78dcba0c7278816d84c270159965de"
+		},
+		{
+			"name": "@deepseek-ai/dsh-system-prompt",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-XeKC54+m2N/euS/PoHpkTpE2Hp32NkFd+nlNeUzoyC+SKdIvo1RTcTQWY6DZcJm51znnd8B92V+mhfnppGbb6Q==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-system-prompt/-/dsh-system-prompt-0.2.2-rc.5.tgz",
+			"sha256": "dbd015a5e67fa15c54da341bff0925837e218a07a69dfb0af1ae7f04132dda7d",
+			"modules": {
+				"lib/index.js": "619c2f5d6291377e85eb2a682476ab5fa96a2c5e03230fbf0ed6c4d06fa704ac",
+				"locale/de.json": "ea2fae1db67d547821290506bca0dd59f03e06ccf3d0b35f8ac7ebdfe694b379",
+				"locale/en.json": "aca3560997e0aa9f35cc25a4459b96a38ce245fbdb41b83694807c1db001231c",
+				"locale/es.json": "808e86aabe004a54a33d7a95c7bbb0ad40d5f1fc90eb1de2cd0d631fa563d533",
+				"locale/fr.json": "baee2ce4d073ef62912e3d99c063c77145ce335a0c60a3f73592e785aaa92672",
+				"locale/ja.json": "5579f4e8b6365145e3d0ec94bdb64a613411d223c7f4d6d93c582fba74e431af",
+				"locale/pt.json": "1db1437ca68c03996d6705bc5a50796bf383b21083cd071d6ae4d0ecf01083b4",
+				"locale/ru.json": "5de2770c4a517cda6a2a1f45632dfe7cd35bc3a30dce2a7fa34a73e08e48b918",
+				"locale/zh.json": "4c296e6b74ff61fb30e175d723485d247121292ee06094993c9ea9fba96ba25c",
+				"package.json": "e501da4c9f523cfa74909d280bd7af5ef3d58eb2d08fb4d48604369943724716"
+			},
+			"programs": { "lib/index.js": "a692e3cd4c41aacd913d85af5637433447715c64e30a06dc772c8a0120591177" },
+			"loadingDigest": "44ed2d3010b1636a56baa7232950ac9f4b5e3c3de99b441de79297d76b055678"
+		},
+		{
+			"name": "@deepseek-ai/dsh-tool-bash",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-RF4F6HLBIZtQRq7h91wS25oRrJKNFqb2oBWMxWSrGEIuGdIcNL9VD5U5CZl2zK2cPcQv18bCrE4TGgVWXCWwZw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-bash/-/dsh-tool-bash-0.2.2-rc.5.tgz",
+			"sha256": "d130ffd91442f6dab0b20c12826b8f9fa102a608c72bc6b4d8bddaf83abfcfa9",
+			"modules": {
+				"lib/index.js": "8fb836a65eb633f85aa8b1b079fb306866e597fe8f4987c2205b5c4482df57de",
+				"locale/de.json": "1e6b02dabf1a6413e583cbb408541fc74e58924fde944c36c89fbf2481fbc512",
+				"locale/en.json": "024728de2890c931e3f06286648f5033b318e741c653ca37e78487f17aaa8d72",
+				"locale/es.json": "9542933eb553ff22915524dc911f3207a9e5f533848b6a6c250585021f675c64",
+				"locale/fr.json": "88430e06ec83bd9f021b0659ee685e9dcecd1de1cfd6ffc29bc844be28f7509d",
+				"locale/ja.json": "34d5c386b547b8b7acc1ef459b40377c8bc247104a3973e7b107f6894b6d9d41",
+				"locale/pt.json": "630c209775c32361e888470cf54c8bf7bb9b9412cda4b2157c8646ec5a19351d",
+				"locale/ru.json": "14b1f5d524b31edd9fc21aa9c07cf631efeeedf63ed6f74ab04da7589bfd0820",
+				"locale/zh.json": "e350dccf742589873b196d5fe4034d86f3a5ce004e632649e16cbbb616555aad",
+				"package.json": "764c9a203f5b1262ddfbd07b91eb58871147ada293141a25b3511e0d1d12b7ce"
+			},
+			"programs": { "lib/index.js": "a654d6dc29fe8d31437abce3fc129ad27986aeee159835e12ce548a2566f76cb" },
+			"loadingDigest": "e3d80e777e24add7a944ef80a0ffd3aaf4c9283da2b72b00fc0c9a8dbbc00c84"
+		},
+		{
+			"name": "@deepseek-ai/dsh-tool-executor-native",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-l7Lvt8Y8Q1B9Sz8bCM0Oi4sKi05z/IK40BnGvBBwocf5adl19suSSZ2unBIe1qWGw5TfsWokCKOIBWBR9x4shA==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-executor-native/-/dsh-tool-executor-native-0.2.2-rc.5.tgz",
+			"sha256": "73f2bd4e7620b3160d33b29cab324b9dcdb807241b9b5dc643ac2c547dcd8187",
+			"modules": {
+				"lib/index.js": "db667cb6545bb642bc2609d49f797b1d7e852e4197d5d38bf541abc7ec078599",
+				"locale/de.json": "9d93de2b42f2ad4b620051715045c440ecddada3bd4a07f912767d9719f6a0b0",
+				"locale/en.json": "704df1882f8c8c671a7ff0d5956c6f414cd88a5896920da5f5614764870fc2cf",
+				"locale/es.json": "5146850dcf6d2a8c3050b68e2bd92542e3e8ec84e296c06eb0b646363a5742b3",
+				"locale/fr.json": "276f207e736e4be7304024f4dc59097ce9f3809c329acac0f0278b64a57e50fd",
+				"locale/ja.json": "21d38e062f4ed97573266385d48e0e3f04e84326e3a56b6482ecb9e06a9ebb6c",
+				"locale/pt.json": "9fda513c8e452e3c5814aeaf8a169794434e43ada76cc1d46af458dd166320a3",
+				"locale/ru.json": "e7e2ead2132e04610a08b2bae3f4e967775e82415e78487bd1d6a22432093f50",
+				"locale/zh.json": "8654a0630b22b72db877fa73cbb803bfd5e707532fbabf6fe9bfed06fd5f5121",
+				"package.json": "d35273608d56711265f70cc6634476db1684316ac5f4197307c8c1d65556356c"
+			},
+			"programs": { "lib/index.js": "b9aadbbc66b70adeaedf2b272b8fc18b0be3a771f52ccf1d2d3b011b8287d173" },
+			"loadingDigest": "9ddb396b27b8e5a0d20b77ae97c8e7b35cf7b1df8849aeedbaff90e60e11d0f0"
+		},
+		{
+			"name": "@deepseek-ai/dsh-tool-executor-ptc",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-Hr/8FNbv2Y9138kY1fpxI4AYIWmGO+tTAjRBjzCoII/prl27HhKKB6YZ9c9OxgfyuSOsFucTfILCMZzfAgKMng==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-executor-ptc/-/dsh-tool-executor-ptc-0.2.2-rc.5.tgz",
+			"sha256": "aafb5a5b4ee49abc314e794993b0298947dbeb1e2d1a9ab82b391525efcfd04e",
+			"modules": {
+				"lib/index.js": "ce5425f21f6da7eaf5d660979d4e69159f47446f612ccf9553d4e2636a30d86a",
+				"lib/types/client.js": "e4bbdf229c3e9013990617f1a64f9cacdc2dc6f3af34f9098f82223e5f2d3cae",
+				"lib/types/config.js": "0d64199bfd10378ee64cc2e01d419a359a7125778c0545aaee8953b03a6f2f37",
+				"lib/types/errors.js": "6ecac364ff686635eb4f86e4975a21e8b3fa10158e87a6dc35f018082dae20b3",
+				"lib/types/index.js": "85f32ae811dc2c2ac47637e08d3334839f7342ef2c8fa781840022d716e9e586",
+				"lib/types/ptc-calls.js": "fd9a697115f688a576f7580a76796dc62cc05441fecfd2176216cf078c83bb6f",
+				"lib/types/ptc.js": "bb16e963aadccc5cf3fca89e41d4827e98e076520c9528230287c4672574f9da",
+				"lib/types/py-types.js": "516568e698a821e65514f9f6046322fb5419216a5508726c8657c312fd5c6a4f",
+				"lib/types/runtime-types.js": "381a4eb6da1ef4914a59593130d8fc9314d3896df3ba686af54c34cd61bcaec7",
+				"lib/types/ts-types.js": "c9f446c45dc74d33c95b18f51ce0405d8bca06651e300408b9e8c48e252950cc",
+				"lib/types/types.js": "d07d1da97f21f8d4f0850d2ca1d2c51b6e962633c3014e90bf4a654346926067",
+				"locale/de.json": "998be691225a60a99c4a25c0225797a9e61717937e37515c6f2024f47d66d84d",
+				"locale/en.json": "229fccd7be2275dfc9cb3ad2d3ea0e2615f6aa7b10f5ae303718a782b47cca4e",
+				"locale/es.json": "9ed3f849299edd0041f399996941aa83c28c04a47e5fb417bb94c07dbf632079",
+				"locale/fr.json": "3dbaf13ce165ebe34773018d2b6b94b31694363e5ca0a6a823b3c112fb596a88",
+				"locale/ja.json": "543cd76aca55f9511f2ff42c1978f3453bdfc69b2af0c610ebc50c09adc60191",
+				"locale/pt.json": "03d888f97c487a2893a9020311e3c5a1252d2f93a9fa6b3fb0b2981813b1b027",
+				"locale/ru.json": "19a4aabbe897423de810002c47412404dca6e1f6a4397bde1ca08699730ee485",
+				"locale/zh.json": "d4eab5af11289714d3c42edfee49693a2d38e570d49cae9b2d848df7517d821a",
+				"package.json": "727791d4a051f009bbfedd20966d8774d8f1b1c060f74cdd57ac6b0599923d52"
+			},
+			"programs": {
+				"lib/index.js": "a6eb3c6db661072919cc18e28ab77195b40e1487254de79fa9f93e23c69c913e",
+				"lib/types/client.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+				"lib/types/config.js": "ffea12f7899ccf32ec76aefae6bbce0091d14cafde2c41cc9ed3044bdcf3ded7",
+				"lib/types/errors.js": "8b2d70642d88d85497dca3c3b37a3b2ee56c37efa7cbef43d6d1b1c80e8ae82d",
+				"lib/types/index.js": "b312a07633735704c7eda2c98fa30e01ede8cf118c0a9e6d0a827c2e0685da30",
+				"lib/types/ptc-calls.js": "c62a088df021c1c84cc45fbe17b58bbbe06fc8b1edfa124fddaa6aa2b266a186",
+				"lib/types/ptc.js": "a2859b78dc4cbb244b4729f4d7c33677aace9cabdf55a0fced4f13c7a9c5940f",
+				"lib/types/py-types.js": "f2b6c67a80d21b363901c1decd5f3b109ff1e0e9169982e42e5395713e383ac4",
+				"lib/types/runtime-types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+				"lib/types/ts-types.js": "71553bb946aec0c44646ef253268235326d0fa351dc1d95af7024e550b6a6a16",
+				"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+			},
+			"loadingDigest": "dffe6b58c6df0ff8a4579fd22b679a47c337cd9811a8418d70b2bf2e6387f41e"
+		},
+		{
+			"name": "@deepseek-ai/dsh-tool-fs",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-Tx/kK7+GfFy7C7P7Knv9zwaPk/oN0fpE35o9LUyVAUp/1mbWJCmW/upH94wtlkMlz2XCqEDDUbsxdhO8aokk1g==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-fs/-/dsh-tool-fs-0.2.2-rc.5.tgz",
+			"sha256": "2d96feff5076c8cbe1a79d936e349117d00e1c1d7cf1e86ca0aa4878d764dca7",
+			"modules": {
+				"lib/index.js": "f27783bf0d89391ed775b65df47acb6b52adf526f4b9d849a0eeb3937a80d6c1",
+				"locale/de.json": "8c253f33ae4ff55a96f3ff4bc611ce69842898e8d7fb06bce3c4b3ae322a89c9",
+				"locale/en.json": "a87b4bdd867e4daea1597c7cb811c6f72e3636d564d71bca24aeeb6aca2e8adb",
+				"locale/es.json": "0ea2f9c0c1d78ffe03b38f6a5bd9736a62c062edf154750cd6e1e4bfbfb21620",
+				"locale/fr.json": "78416664ff9d32146122dc05b7dd25d377dcaaac6ac85cd6b28bc85a51be18d2",
+				"locale/ja.json": "993319f95c4574303d7deee761b005abf6809875cde710f5f0fc261fbd7ecac5",
+				"locale/pt.json": "42a2782d217e08488d5ff2d2b5b59f276b00de8569538fdf614eddac78af2102",
+				"locale/ru.json": "559a5871bf64973837a07f78f4b9d98e503fc90adadfaa63a3ed0a20ddd56f69",
+				"locale/zh.json": "f3c62df21828e8358237cb7db674ef61c2139793083137bfd6b24dba920297de",
+				"package.json": "55083a38da71d14368efc0923a5296a5060adfc2f9d735ecf7ca6236975f2359"
+			},
+			"programs": { "lib/index.js": "bd32d9ad120a2900c149cdf725fc368e1451207afec6b044bce30538477ddcb1" },
+			"loadingDigest": "c644c5ce16aae322651d3c6929e8ef0edf09496af64ac78a3d8f7aa4d6a7a82e"
+		},
+		{
+			"name": "@deepseek-ai/dsh-tool-goal",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-g5he+4ct3jLwqsls3nM/yiwSusU+wVD9fuHd5Y3Qnf1rZUZC9XxHo0o/6S6KdEdGj0ngfn99zH4Tjci226oWow==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-goal/-/dsh-tool-goal-0.2.2-rc.5.tgz",
+			"sha256": "7e95d0c9711f0d9cb1cc0b8647eab5f8f0e129653abb0a7ecae62ad63ddb40c8",
+			"modules": {
+				"lib/index.js": "f0504ff77f432c1c7359afbad53117290530eac5ba601eec800e93efbe0186d9",
+				"locale/de.json": "cb243191358bd884601b5a5713834482404ea8f7c83a79a8278e13724ff4bfdb",
+				"locale/en.json": "627e67bd93ed5fdcd78778f5566bd8ea3378ed38950025bb0e490f000128924a",
+				"locale/es.json": "d96c0297971b8bd1cdf8c2df430632beaca0e26f3a190d4e3d9f86927a5a05b6",
+				"locale/fr.json": "448a84c38e573e4eda3dd0d4de268a2c32f20346fd52353049f195be1bb22f56",
+				"locale/ja.json": "59a413270911d0e3a60e09c568b00df30a6a637588c3e5142bc2b077de5cd4a4",
+				"locale/pt.json": "195269cde856e88b97ad1a103925fdc9d807d245786f5e0a37803b9fb53fea65",
+				"locale/ru.json": "32f1988dbd3a80537a14e188c4b2c6c99ae75427206c1914a8d1c1178b607d0a",
+				"locale/zh.json": "812548da0c193e0aa94803ca032bfed92a53fc508b42ff9be1665782bea6bb5f",
+				"package.json": "67d2325d543d7b441d37ef3db397d414cf62c69d1d7e427a7239d6abb406301f"
+			},
+			"programs": { "lib/index.js": "14051830140078cb1363a6773c9655c842fa3636e955ac2ea9e4e3492100c939" },
+			"loadingDigest": "8535a794ee93bd84bfc10ac0d24f6d4f9f35f244beae6f0f42027595d83ea769"
+		},
+		{
+			"name": "@deepseek-ai/dsh-tool-jobs",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-sg/2SG8+666REWMCqrq+XJUM8QPJEWd8quwzT/InXKl4t3cc4DxoYDxXNXcISAsFibx8sLPeiLr47yUXOchcZA==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-jobs/-/dsh-tool-jobs-0.2.2-rc.5.tgz",
+			"sha256": "5f4685d366f6c30e14ad8157d2ab41b831c6242af1df804a9781e6675a8644ba",
+			"modules": {
+				"lib/index.js": "a457e8f5d5d20f6dd917e75b578fb04452824e13560bf658c57ea654461fe6d8",
+				"locale/de.json": "6ab6473da6fe000ff18e8a8415fb6745762d59e23623b1729c5837412beb4d90",
+				"locale/en.json": "b808d2e652d4c4776849e195800561f62a84edb42691be32de82bc1040041f88",
+				"locale/es.json": "973b97d1b3d8c8ca8cb062e490301f4e8fa7e38ae32fb8a57944c322c1e60e43",
+				"locale/fr.json": "35dbcca64739e4539aabee092d6a584a0389700a389102597b66aff576e2acc5",
+				"locale/ja.json": "2b3247732f6f13b1836454010a7c5c1ee0ead87419ab7c4af2b60adb8c472755",
+				"locale/pt.json": "4280f2e5c7a6a6af395baaadf3e53dd8ef811c15f88b4a4acce9dba3afef9c49",
+				"locale/ru.json": "fc3c6f1a958d661bc935bb63add391247be2ac30a7544ec277d3b8530a9e423e",
+				"locale/zh.json": "12ad315dfa6964c4ff9f9dce9201fdcfa930d8db9134616ca706a1e460f79578",
+				"package.json": "dddc4d82111d9cbe67ce38b7dd59c2147e4b37758134011db1a7e91b50699c02"
+			},
+			"programs": { "lib/index.js": "c4413e419863b4fc88c6eb42b8f1418590b0165edafbbbe2b2fcde98b57c9d16" },
+			"loadingDigest": "d32623dfe143bb1bd8ba84bc74b29ef0280162274b65fabd0fef311af3662353"
+		},
+		{
+			"name": "@deepseek-ai/dsh-tool-pwsh",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-oD/Wn9FImc03n5+53dwJFTwe2Ozi3q/fGhLsKhW2xxTR1/uAwcRl57ynTkZXkELHUPqnZ/rRe5Zdsreqh0OWgQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-pwsh/-/dsh-tool-pwsh-0.2.2-rc.5.tgz",
+			"sha256": "cb9fb5c866f5b22eff0b80d67a2e3e5c9501301f4dc2399ca9276c160c8e9b7d",
+			"modules": {
+				"lib/index.js": "03a29fb9cff987662c14ab925a37ff4ae8b1ec3cce21f8af9c44eec7dd4c66eb",
+				"locale/de.json": "b89f0062d6a46aae7d0cb7cc0fd4f09f27962c09ca452ddd9aa7ab85b480a4f8",
+				"locale/en.json": "c2b98f8ca857b119c7a204272acd65b58dce7f6e7d0e397925110a4ce42e20cc",
+				"locale/es.json": "105196e9b28e04ad5aecddc6a94208c9abf4f113c534bdf6ca9ef421b1487f08",
+				"locale/fr.json": "d78e6d77e7f5dc6a68467a4a5acc953c9edf76298ed137ceff251c8c8ea442a6",
+				"locale/ja.json": "bf3314941549aa22eb0d44b0cd31e50ae423e3338332bf53ccd78126650b90cd",
+				"locale/pt.json": "ef412d763f05f4030208fad5c47a9e3d04fd95a7685a7e6acf32d0061b7597ec",
+				"locale/ru.json": "69f75553c37c9ca42d80c4b1fe5eb499ba73e540f10a468712ddd486620b47fa",
+				"locale/zh.json": "79df94a9ef398da0598be336ccbe65751429e9c3754c5c21b77cfac80bc0ba36",
+				"package.json": "4b30428947b4157ff20f72b673957ed88b3e0c82c0e62225398bde5cf560b497"
+			},
+			"programs": { "lib/index.js": "a98ccd2354a7af549bcee6695ba7f93b64ae936c81a435372dc5a97ca3f3767c" },
+			"loadingDigest": "0dbfbc78f8571c15b77902fcec3a86f7a0da44e29ef88b17e07f7eb3eefde91d"
+		},
+		{
+			"name": "@deepseek-ai/dsh-tools",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-Zowk7V8KjdJBaE9d6l7q782lre69SI29XP8/ZloVhbyo9+3CH/U7LRmEECDXA3OFN3O0abwm1aZEOAcRGEh4mg==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tools/-/dsh-tools-0.2.2-rc.5.tgz",
+			"sha256": "4653b0a18d0c2dd393f420ee3a8edf481a7b7bffe9675f0a18bb9e686eab9cf3",
+			"modules": {
+				"lib/index.js": "bf71a6ce1e95c5dfba06be7f69827bab19c5d2d9cf272875d92013ba2a8dadb0",
+				"lib/pipeline.js": "679072e59502fc211ac2336f5b3146a96c98636b30846ec70433db42d82a7abb",
+				"lib/shared-DGx6D7zk.js": "1ab4302fb7f04957889d89217f6bbd269cc3fbaf3a1e9163502318b24b3db022",
+				"lib/types/batch.js": "fc31ae28425535a39eb2fa0b17d14294b186cea0e3a7951333cccbc6e6f07c3b",
+				"lib/types/contracts.js": "e550bc699a703f70a2ed5c3438fe5c8b21dd266e53036ccdbe4628d1c20618ff",
+				"lib/types/error-codes.js": "195cb92f38453cd356522e63f37776a8c2cd9594499f2bb09120314741549df3",
+				"lib/types/events.js": "ab7ab1bc958390572a353df1670ba85f021bde06c45d4268ecd1b37f69026959",
+				"lib/types/executor.js": "f72b9654e691fdf163310c8d15a4f5ec62126a83e6a9cdfb5258a12a50318280",
+				"lib/types/index.js": "857e4c6c7c23ee2f3dbb0f589e73c3f4269bed26d4e513336edd19d409d0ca0b",
+				"lib/types/json-schema.js": "912e04e68c2455cbb77651031449574f992720c90311e6cbecb1d35020bc1072",
+				"lib/types/pipeline.js": "7124b0e658b0719d84dde773883fbb44675c11f39176936f0c75c3ecf66e8301",
+				"lib/types/presentation.js": "253894265253e38fa9db12f3696d9dac9fd2bed1363c04ce3f95c0f19a6c16da",
+				"lib/types/schema.js": "2d78f3ee4c67ab4cf49b15278baa32edcb5edc708994be3333d9a93129631c10",
+				"locale/de.json": "d387d542a571d2931098fc3452cd0ca23da658bd1fa1192cc4711df9729c28aa",
+				"locale/en.json": "e5702c5d44298301f0814ea45d93b9787ff945784be8ef7a4d90307bb4113054",
+				"locale/es.json": "86db48381394e6071e3cb9e304bd374c90701766a273b5028dea524b415f4c6a",
+				"locale/fr.json": "8a45d98961e02550b2d62c568970a42dd5dd7b82dac09c7c6e056001c4bcdcbd",
+				"locale/ja.json": "a54fb0d4c672a3db980c203944b4739f58e54565ce6448f203209cde28901a36",
+				"locale/pt.json": "2ee5ba96a3b8cc978ef547e2b63436e95f7d13ab2eee5b24018ce4917e13c093",
+				"locale/ru.json": "33f7a69acbdc9243cbee73c6b655effd20d3f97475d266ef6c3ecf76b5407361",
+				"locale/zh.json": "fee882a7a8482ac683f6f0cf12c053637684dac59c9ae1cc86bd5f044862cbdc",
+				"package.json": "4e2b0b859275f0ce2261c806b710d997186a9eba69fdf8e9950aac8eb7237136"
+			},
+			"programs": {
+				"lib/index.js": "df1bff84700cd0be36bc42c56c97d409e4501ee6043c71bc04f481f9e1fa0e8d",
+				"lib/pipeline.js": "4e6c795dd41d2309628552c727c1d26caade4205f4ee6b2e809323e3bf559b9c",
+				"lib/shared-DGx6D7zk.js": "033e344a581ffc952778240c68a9bc4b8b4fa69912f6434fbe7f80bd66d3f1e5",
+				"lib/types/batch.js": "8320b18e0382b49d84833c8dad891dfc3dd48f272c39c000e0a774ec4e630074",
+				"lib/types/contracts.js": "fe356d9db9a643052904016f1dbc41732cc0296d9d8c2486a02b119dd0fe6c25",
+				"lib/types/error-codes.js": "9c9fed1854a669c57ad938a7608b036b5594beb341e96719423adf9b2af9bd81",
+				"lib/types/events.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+				"lib/types/executor.js": "199d85de629285ad366d7615673cbc7497934f72ef32a6886b324af0d88d0470",
+				"lib/types/index.js": "edfd88c412623a5dcdde631f814a33789c9919af0b24e2b7ac580edbc6b523e0",
+				"lib/types/json-schema.js": "ecabc88dab43baab4d01db4ebe4895654b81749f278588c01e7924faa84700a5",
+				"lib/types/pipeline.js": "ad7bf3cacca157927e053d2971784120b95c89d808c0142bd112bfa7221b430c",
+				"lib/types/presentation.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+				"lib/types/schema.js": "4b4c83f91c2612c5a2b2e9dca29291a43b8b778bd1ea2158c2e53eec86487fce"
+			},
+			"loadingDigest": "3c7a091964e57e827eee27c4f4a2bc39cb80ff63a6e20c839bb3272ac8738634"
+		},
+		{
+			"name": "@deepseek-ai/dsh-user-approval",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-Im2bB8oYnl0A2CnqmI7qT9JmpVgwArlI07r8aAIPhaG4QfdIFS/uP0X7Q8Xc6ZAS85AelFNdEUm9Ms6YuYzjnQ==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-user-approval/-/dsh-user-approval-0.2.2-rc.5.tgz",
+			"sha256": "1317d8f7ef19b205ce947d1fc80212d9c0efe6e9806e4a54b8a5b2f4176df861",
+			"modules": {
+				"lib/index.js": "45b7c170b6897f15a338037b1951997a1b99018c30b5fc95f7e08ad798075be2",
+				"lib/types/index.js": "ceb6c078357018aad461928a133e559e0cf36bc331b495969690e10037cb8747",
+				"lib/types/types.js": "525e6f38c039c0b20c6d071bfe06799e8fbc41b2af2ce8db7b1feb3faebad75f",
+				"locale/de.json": "bc53487fb19490ac6fa9d22e3f6373622a143832f5cd26d2fa93e6e72143f2e9",
+				"locale/en.json": "f83d9ad967cb3e6174a4424dc5fca9849dbe68f2057ceaf0e4926b389bce1f7b",
+				"locale/es.json": "96676bdff8f06111806575dcc41e0f11805648f583ecd6791d8b71e01f7614f2",
+				"locale/fr.json": "9f3093bf44606dda23b5f579a4004fdd6e851b2113cbad315556d4911b658639",
+				"locale/ja.json": "8d358d9e9f19133c976c260e3a6e5f7914361ff13531b9deb9385107245c8d24",
+				"locale/pt.json": "1b505635c9c54e75b084febc4704199e520cdbb313ef6bd97bd1465358744aa9",
+				"locale/ru.json": "0998e2129e4facd2d3f1663977fb1fbcf5d8ef0568bbc40f30152a58bd66dcda",
+				"locale/zh.json": "c09baf56ed75193106e8430a857f463019b43130b65ba00d910ef43e105d503b",
+				"package.json": "86f0232433c3b189010d70ced8bd86c4ce3d26c8c8a9aacc126214d9793b0a24"
+			},
+			"programs": {
+				"lib/index.js": "3a31c04252ee5be1cc280842fbf85042ed481d68b9ab2126ac5bca2841b5b793",
+				"lib/types/index.js": "8ae814249f6915bceef881b69941a42f777f82b15aa463386d9156469995caec",
+				"lib/types/types.js": "59c2241ede0957a0d4e93789fff530e3fc3eb5f358267346777eaf82a7fe0058"
+			},
+			"loadingDigest": "f7997bfb7f052fa5d27c16674980b4a232febbfadc9ab18d29527c34c1e82ac9"
+		},
+		{
+			"name": "@deepseek-ai/dsh-util-values",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-ISgMAgMZ1+d5Iqdd2J7PfUZbGPAwLEWVAl87pmtJFlgkZukbT3GigvN27BB53Tit7fGR1B5zgwgvQA7zOlegmg==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-util-values/-/dsh-util-values-0.2.2-rc.5.tgz",
+			"sha256": "366b2c98031bc8f1e9c34f42a936521e95d2129f9a2753b5e85e55e2046e7240",
+			"modules": {
+				"lib/index.js": "8b4ffdf40126d48bd22017b4671f7e90612d01833fc865f7a0b60d3de4183e8b",
+				"package.json": "7aa756ab48475e6feeed2a6dd3f0e2b4d42d7ccbc0777fa55b5967a82739d94d"
+			},
+			"programs": { "lib/index.js": "6125323cc30cdd4ef6034136c918d5e04b526e14a490d49bbee96a230dd62bf5" },
+			"loadingDigest": "b6c16bf11934583046cb2e939d80b0be4edd741404488086bed988a0706b6153"
+		},
+		{
+			"name": "@deepseek-ai/dsh-web-app",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-QseITtTPJA+AYSyyjSOxZywGzI+vJXQOqTkSemqvR1k/9OM5h92SZjJ0z0xX3gVd7tbLkUwlou8TLYOWlwfNHw==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-web-app/-/dsh-web-app-0.2.2-rc.5.tgz",
+			"sha256": "4bcc25cdf44e5851d0a7a7ded4ce0af7ed6af33cdea7bb3eaf599c4dce0ba181",
+			"modules": {
+				"lib/index.js": "6662ca712368c56fb8818efa53039ef92ce215a328a76b9cdd5e1bed624a0e84",
+				"lib/public-url-D_dMK-yI.js": "5e3afc38412dca3f3601e3328b7914a41d3cd7ebc6b0873777c2ae88bf82e9bf",
+				"lib/startup.js": "7b908c0194231691e39a346323d60dab9a7add78a3435a89d60a0e5b6fab87f4",
+				"locale/de.json": "d02e9355c80b6d92dd38761f4d569051f8b55e2e8569bae21a43fd382716aa67",
+				"locale/en.json": "fb54a52d363b9326f7a766f404a34caa8beaf5b3a0002f7455ae2ccd73b62a13",
+				"locale/es.json": "6a26dc8a8b7448633927953faf1269562a4029c491a3296c5038f059fb0db569",
+				"locale/fr.json": "0032a8098a27492a5e97f4beb3f3e5e51112f9462a5d10b03cfa7d8fff0cdb53",
+				"locale/ja.json": "64d805f887b978f02438979d4408fa6d791a8669bea64e4f97b2bb7ca88f2c24",
+				"locale/pt.json": "242c0801c8a0157b112bb16faa41e6510e9b839151b6670566c4dc1e126bf322",
+				"locale/ru.json": "30308efd30b8709f599e46bb1db48d4e50676db4e7195545bb4df678e011c293",
+				"locale/startup/de.json": "7581250966ae4cecd13fd5a7da980f98def5185459a174494ffb912de0653afb",
+				"locale/startup/en.json": "1215423a99cf15ca80d3cc5bdd1d1c796eaf541ff33f7a1e7f48ad4a8a214fd4",
+				"locale/startup/es.json": "bc19fd3b7362d6f423c451282ef502e434c642007f665292ce8f067330110982",
+				"locale/startup/fr.json": "4c7c49cbbbe8846a84bcf87460825f55c16a26862717151d70e8a22b66398b66",
+				"locale/startup/ja.json": "4dd62e3fb18337ed557bbbe75404800bb0cd1b3225975297546884ac4ebc973f",
+				"locale/startup/pt.json": "62902b0002eb676d3bc34101cfd2262f804d98ca2cd7fafacb52dd40a490f8c3",
+				"locale/startup/ru.json": "17e4b40005af7b26a0f170d8eaaeff52698adf58a0fda52183404f1041182aeb",
+				"locale/startup/zh.json": "2d774916a08b3c7d5ce21269c31b8388d07b2068a27b7c5876330a7523ee09c4",
+				"locale/zh.json": "5620c558d8f6bb2b58ad4f8f910f3920a645e304f9203522a96a1a676b52dbca",
+				"package.json": "4576ba517d6005b07127bbaa1ece50f9bcec4cc0ad0bea936a86d0a635d54f2c"
+			},
+			"programs": {
+				"lib/index.js": "dd31ed44eb3dd9e3122072e43c94e1ba89dd599ca8af75284b373c85d1164154",
+				"lib/public-url-D_dMK-yI.js": "caf355c89e5766bbcce58ff2fe9f79f24e3935d0123389af16b379ecc56f56c3",
+				"lib/startup.js": "d99475172ed37413f843d0e975c9a034f8b1a2be064c35db216df16494784afb"
+			},
+			"loadingDigest": "63fe9ef560a756442513164e4e7e5eb07cc033e7307cfb59ff8880845d4e403d"
+		},
+		{
+			"name": "@deepseek-ai/dsh-working-directory",
+			"version": "0.2.2-rc.5",
+			"integrity": "sha512-TN8imwwu4AzYQVahJh5OKs1xFD5xqia71+85tyDQiGoz7s934pxZW1nUKRk3mmWS7wxge6SwrUXyau+UODxLmA==",
+			"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-working-directory/-/dsh-working-directory-0.2.2-rc.5.tgz",
+			"sha256": "d03aab81f0ca96ba18fedccfc95cac9443cec18b0e4e5ca38919754944e87180",
+			"modules": {
+				"lib/index.js": "03cb7ebdaa8b97cfc3170320d04446b99ce939349696289b49549d1e96cea59b",
+				"locale/de.json": "d4e75653d421d233b63680d40157f2fb9981450b9e5792287db73ac19ef0792f",
+				"locale/en.json": "afa5a4baebe54d553b0738a302fcfb9ad2c2ccf725bf917978b45afdb98bf8be",
+				"locale/es.json": "cea1edfb10fb0ffa7327fa70e42b314a167a1921bd820ec5e12b2c9167638585",
+				"locale/fr.json": "65bc4f02fceafc4ad8d4cfa6363df18c9d90cdbc4a0735aa0a958588cec38b19",
+				"locale/ja.json": "b435f0a869a77ef9a1b686ae047c406f1dc61c23f908e32bf1ab5cd12fc2f3e2",
+				"locale/pt.json": "7b6d2d70f523c1ad6d99a3802861dda62a7347001a87e0af64ad7c4db4f3a37b",
+				"locale/ru.json": "b94b8d5179d884c61d5823831b0320b977cb8cf8e935e18a6e1ffbd8996c399e",
+				"locale/zh.json": "ee5dc9bafd0e70f49d7489a10a223b8a9e06749f958a03b77d9e5d34de906ff3",
+				"package.json": "437be05eca9332e1307a953a739ef57083c1cc0b9ce2900c6f4670aed8fa5900"
+			},
+			"programs": { "lib/index.js": "c5533d727978379f3b1a0a9a4edd98103acb43ff6e9f4da9d935b574cedf3c34" },
+			"loadingDigest": "9af4dc1b94563351ba195b6199ca60535af8c48615f7c1e900a6b1863a3a9e34"
+		}
+	]
+};
+
+//#endregion
+//#region src/domain/rc022-rc5-byte-audit-manifest.ts
+/** Registry-authenticated rc.5 bytes, independently retained from older hosts. */
+var rc022_rc5_byte_audit_manifest_default = rc022_rc5_byte_audit_default;
+
+//#endregion
 //#region src/domain/audited-cohort-selection.ts
 /**
 * Version-selected audited cohort manifest (RC3-D01, extended through
-* 0.2.2-rc.3): every registry-derived expectation source — desktop cohort
+* 0.2.2-rc.5): every registry-derived expectation source — desktop cohort
 * integrity rows, default audit expectations, renderer identity regexes —
 * must follow the ACTUAL acquired runtime version instead of being pinned to
 * one historical manifest. All manifests share one audited schema; the rc.3
@@ -9052,8 +10346,9 @@ var rc022_rc3_byte_audit_manifest_default = rc022_rc3_byte_audit_default;
 * expectation sets. The 0.2.2-rc.1, 0.2.2-rc.2 and 0.2.2-rc.3 manifests are
 * NOT byte-stable with them: each study re-verified every tarball against
 * the registry after real interface changes (rc.3 rewrites package manifests
-* and changes dsh-official-bundles bytes), and rc.3 is the default for
-* unknown versions. The 0.2.2-rc.1 manifest stays an independently selected
+* and changes dsh-official-bundles bytes). The 0.2.2-rc.5 manifest separately
+* binds its reviewed registry bytes and is the default for unknown versions.
+* The 0.2.2-rc.1 manifest stays an independently selected
 * qualified state, never a fallback alias for newer graphs.
 */
 const AUDITED_HOST_MANIFESTS = [
@@ -9062,15 +10357,16 @@ const AUDITED_HOST_MANIFESTS = [
 	rc5_byte_audit_manifest_default,
 	rc022_rc1_byte_audit_manifest_default,
 	rc022_rc2_byte_audit_manifest_default,
-	rc022_rc3_byte_audit_manifest_default
+	rc022_rc3_byte_audit_manifest_default,
+	rc022_rc5_byte_audit_manifest_default
 ];
 /** The audited manifest whose hostVersion matches, defaulting to the
-* 0.2.2-rc.3 baseline for callers whose graph version is not one of the
+* 0.2.2-rc.5 baseline for callers whose graph version is not one of the
 * audited releases (those fail closed downstream on the version mismatch).
 * The rc.2/0.2.1 rows below the current floor remain available as historical
 * evidence sources; they never reopen admission. */
 function auditedManifestFor(version$1) {
-	return AUDITED_HOST_MANIFESTS.find((manifest) => manifest.hostVersion === version$1) ?? rc022_rc3_byte_audit_manifest_default;
+	return AUDITED_HOST_MANIFESTS.find((manifest) => manifest.hostVersion === version$1) ?? rc022_rc5_byte_audit_manifest_default;
 }
 /** True when the version has a registered audited manifest. */
 function hasAuditedManifest(version$1) {
@@ -11598,6 +12894,15 @@ const RC022_RC3_HOST_PACKAGES = rc022_rc3_byte_audit_manifest_default.packages.m
 }));
 
 //#endregion
+//#region src/domain/rc022-rc5-host.ts
+/** Exact published rc.5 core identities. Native acceptance is separate. */
+const RC022_RC5_HOST_PACKAGES = rc022_rc5_byte_audit_manifest_default.packages.map(({ name, version: version$1, integrity }) => ({
+	name,
+	version: version$1,
+	integrity
+}));
+
+//#endregion
 //#region src/domain/digest.ts
 /**
 * Digest v3 canonical manifest derivation for Context Guard certificates.
@@ -11931,10 +13236,10 @@ function hostLockDigest(manifest) {
 	}
 	const rawPackages = manifest.packages;
 	if (rawPackages !== void 0 && !Array.isArray(rawPackages)) throw new DigestError("packages must be a list or absent");
-	const packages$8 = rawPackages ?? [];
-	const names = packages$8.map((p) => expectString(p.name, "package.name"));
+	const packages$9 = rawPackages ?? [];
+	const names = packages$9.map((p) => expectString(p.name, "package.name"));
 	if (new Set(names).size !== names.length) throw new DigestError("duplicate package rows");
-	for (const pkg of [...packages$8].sort((a, b) => byUtf8(a.name, b.name))) {
+	for (const pkg of [...packages$9].sort((a, b) => byUtf8(a.name, b.name))) {
 		requireExactKeys(pkg, PACKAGE_KEYS, "package row");
 		for (const label of ["version", "integrity"]) {
 			const value = pkg[label];
@@ -12981,15 +14286,15 @@ const AUDITED_CAPABILITY_ROWS = [
 		}
 	}))
 ];
-function defineCohort(id, supportedGoalVersions, auditedPlatforms$6, packages$8, auditProvenance = "native-audited", acceptedPlatforms = auditedPlatforms$6) {
+function defineCohort(id, supportedGoalVersions, auditedPlatforms$7, packages$9, auditProvenance = "native-audited", acceptedPlatforms = auditedPlatforms$7) {
 	return {
 		id,
 		manifestVersion: 1,
 		supportedGoalVersions,
-		auditedPlatforms: auditedPlatforms$6,
+		auditedPlatforms: auditedPlatforms$7,
 		acceptedPlatforms,
 		auditProvenance,
-		packages: packages$8,
+		packages: packages$9,
 		capabilities: [
 			{
 				name: "host_cohort",
@@ -13009,21 +14314,18 @@ function defineCohort(id, supportedGoalVersions, auditedPlatforms$6, packages$8,
 		]
 	};
 }
-/** Current baseline for new installations and default fixtures. Since Guard
-* 0.13.2 the active cohort set contains ONLY the 0.2.2-rc.3 graph: the
-* admission floor rose to >=0.2.2-rc.3 and the 0.2.2-rc.2 graph is a
-* historical upgrade source below the raised floor — its audited manifest
-* (`rc022-rc2-host.ts` rows) keeps the recorded historical identity but no
-* longer admits through the active set. The rc.5, rc.3 and 0.2.2-rc.2
-* cohorts remain historical evidence below the floor. */
-const ACTIVE_HOST_COHORT_ID = "dsh-0.2.2-rc.3";
-const ACTIVE_HOST_COHORT_IDS = [ACTIVE_HOST_COHORT_ID];
+/** rc.5 is the current default. The separately reviewed rc.3 graph remains
+* supported at the existing minimum; rc.2 and older graphs remain historical
+* upgrade sources below that minimum. */
+const ACTIVE_HOST_COHORT_ID = "dsh-0.2.2-rc.5";
+const ACTIVE_HOST_COHORT_IDS = [ACTIVE_HOST_COHORT_ID, "dsh-0.2.2-rc.3"];
 /** Core-lock/v1 separates optional market identity from the audited critical
 * graphs. Version ordering cannot authorize an unregistered graph, and graph
 * identity is separate from native acceptance of a Guard artifact.
 */
 const HOST_COHORTS = [
-	defineCohort(ACTIVE_HOST_COHORT_ID, ["0.2.2-rc.3"], [], RC022_RC3_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"]),
+	defineCohort(ACTIVE_HOST_COHORT_ID, ["0.2.2-rc.5"], [], RC022_RC5_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"]),
+	defineCohort("dsh-0.2.2-rc.3", ["0.2.2-rc.3"], [], RC022_RC3_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"]),
 	defineCohort("dsh-0.2.2-rc.2", ["0.2.2-rc.2"], [], RC022_RC2_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"]),
 	defineCohort("dsh-0.2.1-rc.5", ["0.2.1-rc.5"], [], RC021_RC5_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"]),
 	defineCohort("dsh-0.2.1-rc.3", ["0.2.1-rc.3"], [], RC021_RC3_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"])
@@ -13337,7 +14639,7 @@ function evaluateGraphDerivedHostLock(rows, context = {}, verifyLockfileSri = ()
 	};
 }
 function capabilityEvaluations(rows, cohort) {
-	return Object.fromEntries(Object.entries(HOST_CAPABILITY_PACKAGE_GROUPS).map(([id, packages$8]) => [id, statusForPackages(id, rows, packages$8, cohort)]));
+	return Object.fromEntries(Object.entries(HOST_CAPABILITY_PACKAGE_GROUPS).map(([id, packages$9]) => [id, statusForPackages(id, rows, packages$9, cohort)]));
 }
 function cohortForEvaluation(evaluation) {
 	return evaluation.derivedCohort ?? HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId) ?? HOST_COHORTS[0];
@@ -13357,7 +14659,7 @@ function evaluateHostLock(rows, context = {}) {
 	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row$3) => row$3.name)));
 	const unknown = supplied.find((row$3) => !registryNames.has(row$3.name));
 	const hostVersionValue = context.hostVersion ?? hostVersionFromPackages(supplied);
-	const hostVersion$6 = hostVersionValue === void 0 ? void 0 : evaluateMinimumHostVersion(hostVersionValue);
+	const hostVersion$7 = hostVersionValue === void 0 ? void 0 : evaluateMinimumHostVersion(hostVersionValue);
 	const baseResult = {
 		digest: digest$1,
 		goalAvailable,
@@ -13366,7 +14668,7 @@ function evaluateHostLock(rows, context = {}) {
 		cohortId: cohort.id,
 		auditProvenance: cohort.auditProvenance,
 		missingPackages,
-		...hostVersion$6 ? { hostVersion: hostVersion$6 } : {},
+		...hostVersion$7 ? { hostVersion: hostVersion$7 } : {},
 		...context.platform ? { platform: context.platform } : {},
 		...context.profileKind ? { profileKind: context.profileKind } : {}
 	};
@@ -13442,11 +14744,11 @@ function evaluateHostLock(rows, context = {}) {
 			reasonCode: failure.reasonCode
 		};
 	}
-	if (hostVersion$6?.status === "below_minimum" || hostVersion$6?.status === "unparseable") return {
+	if (hostVersion$7?.status === "below_minimum" || hostVersion$7?.status === "unparseable") return {
 		...baseResult,
 		status: "unsupported",
 		goalAvailable: false,
-		reasonCode: hostVersion$6.status === "below_minimum" ? "host_lock_version_below_minimum" : "host_lock_version_unparseable"
+		reasonCode: hostVersion$7.status === "below_minimum" ? "host_lock_version_below_minimum" : "host_lock_version_unparseable"
 	};
 	return {
 		...baseResult,
@@ -13567,7 +14869,7 @@ function evaluateToolSurfaceCapability(evaluation, surface) {
 	};
 	return result;
 }
-function safeHostLockDigest(packages$8, context = {}, cohort) {
+function safeHostLockDigest(packages$9, context = {}, cohort) {
 	try {
 		const capabilities = [
 			...cohort.capabilities,
@@ -13604,11 +14906,11 @@ function safeHostLockDigest(packages$8, context = {}, cohort) {
 			manifestVersion: cohort.manifestVersion,
 			supportedGoalVersions: [...cohort.supportedGoalVersions],
 			capabilities,
-			packages: [...packages$8]
+			packages: [...packages$9]
 		});
 	} catch {
 		const bounded = {
-			packages: packages$8.map((row$3) => [
+			packages: packages$9.map((row$3) => [
 				String(row$3.name),
 				row$3.version ?? null,
 				row$3.integrity ?? null
@@ -18992,8 +20294,8 @@ function canonical$1(value) {
 	return JSON.stringify(value, (_key, current) => current && typeof current === "object" && !Array.isArray(current) ? Object.fromEntries(Object.entries(current).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : current);
 }
 const hash$3 = (value) => createHash("sha256").update(canonical$1(value)).digest("hex");
-function bindingDigest$1(packages$8, dependencies = []) {
-	return hash$3([...packages$8, ...dependencies].sort((a, b) => a.name < b.name ? -1 : 1));
+function bindingDigest$1(packages$9, dependencies = []) {
+	return hash$3([...packages$9, ...dependencies].sort((a, b) => a.name < b.name ? -1 : 1));
 }
 function receiptPath(profileRoot, digest$1) {
 	return join(profileRoot, ".dsh-completion-guard", "host-contracts", digest$1 + ".json");
@@ -19035,7 +20337,8 @@ function baselineFor(rows) {
 		case "0.2.1-rc.5": return rc5_byte_audit_manifest_default;
 		case "0.2.2-rc.1": return rc022_rc1_byte_audit_manifest_default;
 		case "0.2.2-rc.2": return rc022_rc2_byte_audit_manifest_default;
-		default: return rc022_rc3_byte_audit_manifest_default;
+		case "0.2.2-rc.3": return rc022_rc3_byte_audit_manifest_default;
+		default: return rc022_rc5_byte_audit_manifest_default;
 	}
 }
 /** Every reviewed published state, for equivalence checks: a graph whose lib
@@ -19050,7 +20353,8 @@ const AUDITED_BASELINES = [
 	rc5_byte_audit_manifest_default,
 	rc022_rc1_byte_audit_manifest_default,
 	rc022_rc2_byte_audit_manifest_default,
-	rc022_rc3_byte_audit_manifest_default
+	rc022_rc3_byte_audit_manifest_default,
+	rc022_rc5_byte_audit_manifest_default
 ];
 /** Validate generator-issued operator-owned authority. The descriptor cannot
 * assert compatibility: changed bytes require the independently issued cache
@@ -19081,7 +20385,7 @@ function parseHostTrust(text, profileRoot) {
 	}
 }
 function hostTrustDigest(trust) {
-	const packages$8 = [...trust.packages].sort((a, b) => a.name.localeCompare(b.name)).map((row$3) => ({
+	const packages$9 = [...trust.packages].sort((a, b) => a.name.localeCompare(b.name)).map((row$3) => ({
 		name: row$3.name,
 		version: row$3.version,
 		integrity: row$3.integrity,
@@ -19089,7 +20393,7 @@ function hostTrustDigest(trust) {
 	}));
 	return createHash("sha256").update(JSON.stringify({
 		...trust,
-		packages: packages$8
+		packages: packages$9
 	})).digest("hex");
 }
 const paxMetadataKeys = new Set([
@@ -19237,28 +20541,101 @@ function registryArchiveFiles(bytes$1, row$3) {
 function registryArchiveModules(bytes$1, row$3) {
 	return Object.fromEntries(Object.entries(registryArchiveFiles(bytes$1, row$3)).map(([file, content]) => [file, createHash("sha256").update(content).digest("hex")]));
 }
+const MAX_PROBE_PACKAGES = 1024;
+const MAX_PROBE_EDGES = 8192;
+const MAX_PROBE_ARCHIVE_BYTES = 512 * 1024 * 1024;
+const MAX_PROBE_PROJECTED_BYTES = 1024 * 1024 * 1024;
+const HOST_TRUST_DURATION_MS = 10 * 6e4;
+async function awaitSignal(work, signal) {
+	if (signal.aborted) return fail$2("host_contract_probe_timeout");
+	let onAbort;
+	const timeout = new Promise((_resolve, reject) => {
+		onAbort = () => reject(new HostTrustError("host_contract_probe_timeout"));
+		signal.addEventListener("abort", onAbort, { once: true });
+	});
+	try {
+		return await Promise.race([work, timeout]);
+	} finally {
+		if (onAbort) signal.removeEventListener("abort", onAbort);
+	}
+}
+async function readBoundedResponse(response, limit, code, signal, detail) {
+	const reader = response.body?.getReader();
+	if (!reader) return fail$2(code);
+	const chunks = [];
+	let size = 0;
+	try {
+		while (true) {
+			const { done, value } = await awaitSignal(reader.read(), signal);
+			if (done) break;
+			size += value.byteLength;
+			if (size > limit) {
+				reader.cancel().catch(() => {});
+				return fail$2(code, detail);
+			}
+			chunks.push(Buffer.from(value));
+		}
+		return Buffer.concat(chunks, size);
+	} catch (error) {
+		if (error instanceof HostTrustError) throw error;
+		reader.cancel().catch(() => {});
+		return fail$2("host_trust_registry_unavailable", detail);
+	} finally {
+		reader.releaseLock();
+	}
+}
+function parseRegistryMetadata(bytes$1, detail) {
+	try {
+		const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes$1));
+		if (!value || typeof value !== "object" || Array.isArray(value)) return fail$2("host_trust_registry_metadata_invalid", detail);
+		return value;
+	} catch {
+		return fail$2("host_trust_registry_metadata_invalid", detail);
+	}
+}
 async function acquireHostTrust(rows, fetcher = fetch, options) {
-	const packages$8 = [], dependencies = [], archives = [];
+	const packages$9 = [], dependencies = [], archives = [];
+	const identities = /* @__PURE__ */ new Map();
+	let archiveBytes = 0, projectedBytes = 0;
+	const duration = AbortSignal.timeout(HOST_TRUST_DURATION_MS);
+	const deadline = options?.signal ? AbortSignal.any([options.signal, duration]) : duration;
+	const request = async (url, detail) => {
+		if (deadline.aborted) return fail$2("host_contract_probe_timeout", detail);
+		const signal = AbortSignal.any([deadline, AbortSignal.timeout(3e4)]);
+		try {
+			const response = await awaitSignal(fetcher(url, {
+				signal,
+				redirect: "error"
+			}), signal);
+			if (!response.ok) return fail$2("host_trust_registry_unavailable", detail);
+			return {
+				response,
+				signal
+			};
+		} catch (error) {
+			if (error instanceof HostTrustError) throw new HostTrustError(error.code, detail);
+			return fail$2("host_trust_registry_unavailable", detail);
+		}
+	};
+	if (rows.length > MAX_PROBE_PACKAGES || new Set(rows.map((row$3) => row$3.name)).size !== rows.length) return fail$2("host_contract_probe_graph_too_large");
 	const baseline = baselineFor(rows);
 	const acquire = async (row$3) => {
 		if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(row$3.name) || row$3.name.length > 214 || !row$3.version || !parseHostVersion(row$3.version) || !row$3.integrity) return fail$2("host_trust_identity_invalid");
-		const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(row$3.name)}/${encodeURIComponent(row$3.version)}`, {
-			signal: AbortSignal.timeout(3e4),
-			redirect: "error"
-		});
-		if (!response.ok) return fail$2("host_trust_registry_unavailable");
-		const metadata$1 = await response.json();
+		const metadataDetail = `package ${row$3.name}@${row$3.version}: metadata request failed`;
+		const fetchedMetadata = await request(`https://registry.npmjs.org/${encodeURIComponent(row$3.name)}/${encodeURIComponent(row$3.version)}`, metadataDetail);
+		const metadata$1 = parseRegistryMetadata(await readBoundedResponse(fetchedMetadata.response, 4 * 1024 * 1024, "host_trust_registry_metadata_too_large", fetchedMetadata.signal, metadataDetail), metadataDetail);
 		if (metadata$1.name !== row$3.name || metadata$1.version !== row$3.version || metadata$1.dist?.integrity !== row$3.integrity) return fail$2("host_trust_registry_identity_mismatch");
 		const url = new URL(metadata$1.dist?.tarball ?? "");
 		if (url.origin !== "https://registry.npmjs.org" || url.username || url.password) return fail$2("host_trust_source_untrusted");
-		const archive = await fetcher(url, {
-			signal: AbortSignal.timeout(3e4),
-			redirect: "error"
-		});
-		if (!archive.ok) return fail$2("host_trust_registry_unavailable");
+		const archiveDetail = `package ${row$3.name}@${row$3.version}: archive request failed`;
+		const archive = await request(url.href, archiveDetail);
 		let files$1;
 		try {
-			files$1 = registryArchiveFiles(Buffer.from(await archive.arrayBuffer()), row$3);
+			const bytes$1 = await readBoundedResponse(archive.response, Math.min(64 * 1024 * 1024, MAX_PROBE_ARCHIVE_BYTES - archiveBytes), "host_contract_probe_archive_budget_exceeded", archive.signal, archiveDetail);
+			archiveBytes += bytes$1.length;
+			files$1 = registryArchiveFiles(bytes$1, row$3);
+			projectedBytes += Object.values(files$1).reduce((sum, content) => sum + content.length, 0);
+			if (projectedBytes > MAX_PROBE_PROJECTED_BYTES) return fail$2("host_contract_probe_archive_budget_exceeded");
 		} catch (error) {
 			if (error instanceof HostTrustError) throw new HostTrustError(error.code, `package ${row$3.name}@${row$3.version}${error.detail ? `: ${error.detail}` : ""}`);
 			throw error;
@@ -19267,6 +20644,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			name: row$3.name,
 			files: files$1
 		});
+		identities.set(row$3.name, row$3);
 		return {
 			name: row$3.name,
 			version: row$3.version,
@@ -19274,14 +20652,43 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			modules: Object.fromEntries(Object.entries(files$1).map(([file, content]) => [file, createHash("sha256").update(content).digest("hex")]))
 		};
 	};
-	for (const row$3 of rows) packages$8.push(await acquire(row$3));
+	for (const row$3 of rows) packages$9.push(await acquire(row$3));
 	if (!options?.profileRoot) return fail$2("host_trust_receipt_root_missing");
 	const targets = [], checks = [], equivalent = /* @__PURE__ */ new Set();
-	const reviewedEquivalent = (row$3, files$1) => {
+	const normalizedEdges = [];
+	const reviewedEquivalent = (row$3, files$1, allowLockstepRewrite = false) => {
 		for (const manifest of AUDITED_BASELINES) {
 			const reference = manifest.packages.find((p) => p.name === row$3.name);
 			if (!reference) continue;
-			if (hostManifestLoadingDigest(files$1["package.json"].toString()) !== reference.loadingDigest) continue;
+			const referenceDigest = reference.loadingDigest;
+			let loadingDigest = hostManifestLoadingDigest(files$1["package.json"].toString());
+			const launcherVersion = rows.find((packageRow) => packageRow.name === "@deepseek-ai/dsh")?.version;
+			let normalized = false;
+			const rewritten = [];
+			if (allowLockstepRewrite && loadingDigest !== referenceDigest && launcherVersion && row$3.version === launcherVersion) {
+				const published = JSON.parse(files$1["package.json"].toString());
+				for (const field$1 of [
+					"dependencies",
+					"peerDependencies",
+					"optionalDependencies"
+				]) {
+					const dependencies$1 = published[field$1];
+					if (!dependencies$1 || typeof dependencies$1 !== "object" || Array.isArray(dependencies$1)) continue;
+					for (const [name, version$1] of Object.entries(dependencies$1)) if ((name === "@deepseek-ai/dsh" || name.startsWith("@deepseek-ai/dsh-")) && version$1 === launcherVersion) {
+						dependencies$1[name] = manifest.hostVersion;
+						const optionalPeers = published.peerDependenciesMeta;
+						if (field$1 === "dependencies" || field$1 === "peerDependencies" && !optionalPeers?.[name]?.optional) rewritten.push(name);
+					}
+				}
+				loadingDigest = hostManifestLoadingDigest(JSON.stringify(published));
+				normalized = true;
+			}
+			if (loadingDigest !== referenceDigest) continue;
+			if (normalized) {
+				const currentFiles = Object.keys(row$3.modules).filter((file) => file !== "package.json").sort();
+				const referenceFiles = Object.keys(reference.modules).filter((file) => file !== "package.json").sort();
+				if (JSON.stringify(currentFiles) !== JSON.stringify(referenceFiles)) continue;
+			}
 			if (Object.entries(reference.modules).filter(([file]) => file !== "package.json").every(([file, digest$1]) => {
 				if (!files$1[file]) return false;
 				if (row$3.modules[file] === digest$1) return true;
@@ -19291,31 +20698,63 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 				} catch {
 					return false;
 				}
-			})) return true;
+			})) {
+				if (normalized && launcherVersion) for (const dependency of rewritten) normalizedEdges.push({
+					importer: row$3.name,
+					dependency,
+					version: launcherVersion
+				});
+				return true;
+			}
 		}
 		return false;
 	};
-	for (const row$3 of packages$8) {
+	for (const row$3 of packages$9) {
 		if (!baseline.packages.find((p) => p.name === row$3.name)) return fail$2("host_trust_identity_invalid");
 		const files$1 = archives.find((a) => a.name === row$3.name).files;
-		if (reviewedEquivalent(row$3, files$1)) equivalent.add(row$3.name);
+		if (reviewedEquivalent(row$3, files$1, true)) equivalent.add(row$3.name);
 		else targets.push(row$3.name);
 	}
-	const visited = /* @__PURE__ */ new Set(), queue = [...new Set([...targets, ...packages$8.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name)).map((p) => p.name)])];
+	const normalizedIntegrity = /* @__PURE__ */ new Map();
+	if (normalizedEdges.length > MAX_PROBE_EDGES) return fail$2("host_contract_probe_graph_too_large");
+	for (const edge of normalizedEdges) {
+		const importerIdentity = identities.get(edge.importer);
+		const identity = await awaitSignal(Promise.resolve().then(() => options.dependencyIdentity?.(edge.dependency, edge.importer, deadline, importerIdentity)), deadline);
+		if (!identity || identity.name !== edge.dependency || identity.version !== edge.version || !identity.integrity) return fail$2("host_contract_probe_dependency_unbound");
+		const known = identities.get(identity.name);
+		if (known && (known.version !== identity.version || known.integrity !== identity.integrity)) return fail$2("host_contract_probe_dependency_conflict");
+		const previous = normalizedIntegrity.get(identity.name);
+		if (previous && previous !== identity.integrity) return fail$2("host_contract_probe_dependency_conflict");
+		if (!known && !previous) {
+			const detail = `package ${identity.name}@${identity.version}: metadata request failed`;
+			const fetched = await request(`https://registry.npmjs.org/${encodeURIComponent(identity.name)}/${encodeURIComponent(identity.version)}`, detail);
+			const metadata$1 = parseRegistryMetadata(await readBoundedResponse(fetched.response, 4 * 1024 * 1024, "host_trust_registry_metadata_too_large", fetched.signal, detail), detail);
+			if (metadata$1.name !== identity.name || metadata$1.version !== identity.version || metadata$1.dist?.integrity !== identity.integrity) return fail$2("host_trust_registry_identity_mismatch");
+			normalizedIntegrity.set(identity.name, identity.integrity);
+		}
+	}
+	const visited = /* @__PURE__ */ new Set(), queue = [...new Set([...targets, ...packages$9.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name)).map((p) => p.name)])];
+	let edges = 0;
 	while (queue.length) {
 		const name = queue.shift();
 		if (visited.has(name)) continue;
 		visited.add(name);
-		if (visited.size > 160) return fail$2("host_contract_probe_graph_too_large");
+		if (visited.size > MAX_PROBE_PACKAGES) return fail$2("host_contract_probe_graph_too_large");
 		const archive = archives.find((a) => a.name === name);
 		const manifest = JSON.parse(archive.files["package.json"].toString());
 		for (const dependency of Object.keys({
 			...manifest.dependencies,
 			...manifest.peerDependencies
 		}).filter((dependency$1) => !manifest.peerDependenciesMeta?.[dependency$1]?.optional || dependency$1 in (manifest.dependencies ?? {}))) {
-			if (!archives.some((a) => a.name === dependency)) {
-				const identity = await options.dependencyIdentity?.(dependency, name);
-				if (!identity) return fail$2("host_contract_probe_dependency_unbound");
+			if (++edges > MAX_PROBE_EDGES) return fail$2("host_contract_probe_graph_too_large");
+			if (!identities.has(dependency) && identities.size >= MAX_PROBE_PACKAGES) return fail$2("host_contract_probe_graph_too_large");
+			const importerIdentity = identities.get(name);
+			const identity = await awaitSignal(Promise.resolve().then(() => options.dependencyIdentity?.(dependency, name, deadline, importerIdentity)), deadline);
+			if (!identity || identity.name !== dependency || !identity.version || !identity.integrity) return fail$2("host_contract_probe_dependency_unbound");
+			const existing = identities.get(dependency);
+			if (existing && (existing.version !== identity.version || existing.integrity !== identity.integrity)) return fail$2("host_contract_probe_dependency_conflict", `dependency ${dependency} resolves to conflicting identities`);
+			if (!existing) {
+				if (identities.size >= MAX_PROBE_PACKAGES) return fail$2("host_contract_probe_graph_too_large");
 				dependencies.push(await acquire(identity));
 			}
 			queue.push(dependency);
@@ -19334,7 +20773,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			...manifest.peerDependencies
 		}).filter((n) => !manifest.peerDependenciesMeta?.[n]?.optional || n in (manifest.dependencies ?? {})).every((n) => graphEquivalent(n, seen));
 	};
-	for (const row$3 of [...packages$8, ...dependencies.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name))]) if (equivalent.has(row$3.name)) if (HOST_CONTRACT_CONSUMERS.includes(row$3.name) && !graphEquivalent(row$3.name)) {
+	for (const row$3 of [...packages$9, ...dependencies.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name))]) if (equivalent.has(row$3.name)) if (HOST_CONTRACT_CONSUMERS.includes(row$3.name) && !graphEquivalent(row$3.name)) {
 		targets.push(row$3.name);
 		checks.push("reviewed_program_bytes:" + row$3.name);
 	} else checks.push("reviewed_program_equivalence:" + row$3.name);
@@ -19348,7 +20787,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 	const optional = result.failures.length ? targets.filter((name) => ["@deepseek-ai/dsh-goal", "@deepseek-ai/dsh-tool-goal"].includes(name)) : [];
 	const receipt = {
 		schema: HOST_CONTRACT_SCHEMA,
-		bindingDigest: bindingDigest$1(packages$8, dependencies),
+		bindingDigest: bindingDigest$1(packages$9, dependencies),
 		conditionsDigest: hostNodeConditions().digest,
 		checks: [...checks, ...result.checks].sort(),
 		unqualifiedOptionalPackages: optional.sort()
@@ -19366,7 +20805,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 		schema: "dsh-host-registry-trust/v1",
 		source: "https://registry.npmjs.org/",
 		qualification: HOST_CONTRACT_SCHEMA,
-		packages: packages$8,
+		packages: packages$9,
 		probeDependencies: dependencies,
 		contract: {
 			schema: HOST_CONTRACT_SCHEMA,
@@ -19828,6 +21267,39 @@ var desktop_distribution_v1_default = {
 			"releaseSha512": "GiJf8kx+C7eoiZ0xQSYBcTyh5xmXQl+vh63U6uSm963McK1AkMgB8PydzuekWdUY7hyURvhVMHANM4pn+tCKzQ==",
 			"vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd.",
 			"files": []
+		},
+		{
+			"id": "desktop-0.2.2-rc.5-darwin-arm64",
+			"platform": "darwin",
+			"arch": "arm64",
+			"asarHeaderSha256": "c2e8c43521f5d6c5ea10142580aa171814623bcf52427f6bc351a9b551478506",
+			"releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.2-rc.5-mac-arm64.zip",
+			"releaseSha512": "28C1+oaRcSjOwWvzqjXA4Cpic7bvTs++wOu3moAfRQMLhTPZv40G3GQTir0wuyuPGh/PsQH0ykb/qJD4pnWMxA==",
+			"vendorTeam": "NAN929V4UM",
+			"vendorIdentifier": "com.deepseek.dsh",
+			"version": "0.2.2-rc.5",
+			"runtimeVersion": "0.2.2-rc.5",
+			"pnpmVersion": "11.28.5",
+			"desktopManifestSha256": "38ce2c1baf343d76d6f36106dd9f7475655b2e1eb09a63b2e9fd347406a5d78f",
+			"buildCommit": "3f85d888b1297107937d9bd5b853f7e733e179a4",
+			"buildDirty": false,
+			"files": []
+		},
+		{
+			"id": "desktop-0.2.2-rc.5-win32-x64",
+			"platform": "win32",
+			"arch": "x64",
+			"asarHeaderSha256": "352f8181b52c0c68f02a7f122355586b1a142a9bef3ba63cb113a7728e41e3d0",
+			"releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.2-rc.5-win-x64.exe",
+			"releaseSha512": "wWySRp7Hk5gcH324jBxAc7KV0mniHzQDofyQexOJMIAWXBkgHTsRCr3IrdwX1XO8OIhDZsLYmve4mLxskikYIg==",
+			"vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd.",
+			"version": "0.2.2-rc.5",
+			"runtimeVersion": "0.2.2-rc.5",
+			"pnpmVersion": "11.28.5",
+			"desktopManifestSha256": "38ce2c1baf343d76d6f36106dd9f7475655b2e1eb09a63b2e9fd347406a5d78f",
+			"buildCommit": "3f85d888b1297107937d9bd5b853f7e733e179a4",
+			"buildDirty": false,
+			"files": []
 		}
 	]
 };
@@ -20270,9 +21742,31 @@ const DESKTOP_IDENTITY_FACTS = {
 * installed-byte audit separately refuses nested critical duplicates, so a
 * nested-only dependency can never be silently resolved here).
 */
-function readDesktopDependency(appAsarPath, name, session) {
+function readDesktopDependency(appAsarPath, name, session, importer) {
 	const realArchive = realpathSync$2(appAsarPath);
 	const index$1 = memoizedAsarIndex(session, realArchive);
+	if (importer) {
+		const verifyRoute = () => {
+			const owner = asarNode(index$1, `${DESKTOP_GRAPH_ROOT}/${importer}`.split("/"));
+			if (!owner?.files) throw new HostProfileError("host_contract_probe_dependency_unbound", "importer is absent from the app graph");
+			const hasShadow = (node, depth) => {
+				if (depth > 64) throw new HostProfileError("host_contract_probe_dependency_unbound", "importer graph is too deep");
+				for (const [part, child] of Object.entries(node.files ?? {})) if (part === "node_modules") {
+					let target = child;
+					for (const segment$1 of name.split("/")) target = target?.files?.[segment$1];
+					if (target) return true;
+				} else if (child.files && hasShadow(child, depth + 1)) return true;
+				return false;
+			};
+			if (hasShadow(owner, 0)) throw new HostProfileError("host_contract_probe_dependency_unbound", "importer has a nested dependency shadow");
+			if (importer.startsWith("@")) {
+				const scope = importer.split("/")[0];
+				if (asarNode(index$1, `${DESKTOP_GRAPH_ROOT}/${scope}/node_modules/${name}`.split("/"))) throw new HostProfileError("host_contract_probe_dependency_unbound", "importer scope has a dependency shadow");
+			}
+		};
+		if (session) session.memo(`desktop-probe-route:${realArchive}\u0000${importer}\u0000${name}`, verifyRoute);
+		else verifyRoute();
+	}
 	const manifestPath = `${DESKTOP_GRAPH_ROOT}/${name}/package.json`;
 	if (!asarNode(index$1, manifestPath.split("/"))) throw new HostProfileError("host_contract_probe_dependency_unbound", `dependency ${name} has no top-level manifest in the app graph`);
 	const bytes$1 = memoizedAsarFile(session, realArchive, index$1, manifestPath);
@@ -20415,7 +21909,7 @@ function desktopDependencyGraph(archive, expectations, base = createHostAuditSes
 		url: "..",
 		dependencies: Object.fromEntries([...names].map((name) => [name, name]))
 	} };
-	const packages$8 = /* @__PURE__ */ new Map();
+	const packages$9 = /* @__PURE__ */ new Map();
 	for (const expected of expectations) {
 		const root = join(modules, expected.name);
 		const manifest = session.readJson(join(root, "package.json"));
@@ -20428,7 +21922,7 @@ function desktopDependencyGraph(archive, expectations, base = createHostAuditSes
 			url: "./" + expected.name,
 			dependencies: Object.fromEntries([...new Set([expected.name, ...Object.keys(declared).filter((name) => names.has(name))])].map((name) => [name, name]))
 		};
-		packages$8.set(expected.name, {
+		packages$9.set(expected.name, {
 			root,
 			manifest,
 			files: Object.keys(expected.modules ?? {})
@@ -20440,7 +21934,7 @@ function desktopDependencyGraph(archive, expectations, base = createHostAuditSes
 			modules,
 			records,
 			reachable: new Set(Object.keys(records)),
-			packages: packages$8
+			packages: packages$9
 		}
 	};
 }
@@ -20551,9 +22045,9 @@ function activeGraphRecords(packageMapText) {
 		throw new HostProfileError("active_graph_invalid", "invalid package map");
 	}
 	if (!document || typeof document !== "object") throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
-	const packages$8 = document.packages;
-	if (!packages$8 || typeof packages$8 !== "object" || Array.isArray(packages$8)) throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
-	const records = packages$8;
+	const packages$9 = document.packages;
+	if (!packages$9 || typeof packages$9 !== "object" || Array.isArray(packages$9)) throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
+	const records = packages$9;
 	if (!records["."] || Object.keys(records).length > 2e4) throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
 	const reachable = /* @__PURE__ */ new Set();
 	const queue = ["."];
@@ -20687,30 +22181,64 @@ function evaluateActiveHostLock(runtime, profile, context, session = createHostA
 async function prepareActiveHostTrust(runtime, profile, fetcher = fetch) {
 	return acquireHostTrust(readActiveHostGraph(runtime, profile), fetcher, {
 		profileRoot: profile,
-		dependencyIdentity: (name, importer) => probeDependencyIdentity(runtime, profile, name, importer)
+		dependencyIdentity: probeDependencyResolver(runtime, profile)
 	});
 }
-function probeDependencyIdentity(runtime, profile, name, importer) {
-	for (const owner of [runtime, profile]) {
-		const modules = join(owner, "node_modules"), mapPath = join(modules, ".package-map.json");
-		if (!existsSync$1(mapPath)) continue;
-		const { records, reachable } = activeGraphRecords(readFileSync$1(mapPath, "utf8"));
-		const id = [...reachable].find((key) => key === importer || key.startsWith(importer + "@"));
-		if (!id || typeof records[id]?.url !== "string") continue;
-		const packageRoot = packageFromAnchor(join(realpathSync$1(resolve(modules, records[id].url)), "package.json"), name);
-		if (!packageRoot) continue;
-		for (const graphRoot of [runtime, profile]) {
-			if (!existsSync$1(join(graphRoot, "node_modules"))) continue;
-			const graphModules = realpathSync$1(join(graphRoot, "node_modules"));
-			const graph = activeGraphRecords(readFileSync$1(join(graphModules, ".package-map.json"), "utf8"));
-			if (![...graph.reachable].filter((key) => key === name || key.startsWith(name + "@")).find((id$1) => typeof graph.records[id$1]?.url === "string" && realpathSync$1(resolve(graphModules, graph.records[id$1].url)) === packageRoot)) continue;
-			if (!within$1(graphModules, packageRoot)) continue;
-			const manifest = readJsonObject(join(packageRoot, "package.json"), "host_contract_probe_dependency_unbound");
-			const matches = packageRowsFromPnpmLock(readFileSync$1(join(graphRoot, "pnpm-lock.yaml"), "utf8"), [name]).filter((row$3) => row$3.version === manifest.version && row$3.integrity);
-			if (manifest.name === name && matches.length === 1) return matches[0];
+function probeDependencyResolver(runtime, profile) {
+	const session = createHostAuditSession();
+	return (name, importer, _signal, identity) => probeDependencyIdentity(runtime, profile, name, importer, identity, session);
+}
+function probeDependencyIdentity(runtime, profile, name, importer, importerIdentity, session) {
+	const graphs = [...new Set([runtime, profile])].flatMap((root) => {
+		const modules = join(root, "node_modules"), mapPath = join(modules, ".package-map.json");
+		if (!existsSync$1(mapPath)) return [];
+		const graph = session.memo(`probe-graph:${mapPath}`, () => activeGraphRecords(session.readFile(mapPath).toString("utf8")));
+		return [{
+			root,
+			modules: realpathSync$1(modules),
+			graph
+		}];
+	});
+	const lockRows = (root, packageName) => {
+		const path$1 = join(root, "pnpm-lock.yaml");
+		return session.memo(`probe-lock:${path$1}\u0000${packageName}`, () => packageRowsFromPnpmLock(session.readFile(path$1).toString("utf8"), [packageName]));
+	};
+	const observed = [], seenImporters = /* @__PURE__ */ new Set();
+	for (const owner of graphs) {
+		const ids = [...owner.graph.reachable].filter((key) => key === importer || key.startsWith(importer + "@"));
+		for (const id of ids) {
+			const url = owner.graph.records[id]?.url;
+			if (typeof url !== "string") continue;
+			const importerRoot = realpathSync$1(resolve(owner.modules, url));
+			if (!within$1(owner.modules, importerRoot)) throw new HostProfileError("host_contract_probe_dependency_unbound", "importer escapes its graph");
+			const manifest = readJsonObject(join(importerRoot, "package.json"), "host_contract_probe_dependency_unbound");
+			if (manifest.name !== importer || manifest.version !== importerIdentity.version) continue;
+			const identityRows = lockRows(owner.root, importer).filter((row$3) => row$3.version === manifest.version && row$3.integrity);
+			if (identityRows.length !== 1 || identityRows[0].integrity !== importerIdentity.integrity) throw new HostProfileError("host_contract_probe_dependency_unbound", "importer identity is ambiguous");
+			if (seenImporters.has(importerRoot)) continue;
+			seenImporters.add(importerRoot);
+			const packageRoot = packageFromAnchor(join(importerRoot, "package.json"), name);
+			if (!packageRoot) throw new HostProfileError("host_contract_probe_dependency_unbound", "importer dependency cannot be resolved");
+			const targetManifest = readJsonObject(join(packageRoot, "package.json"), "host_contract_probe_dependency_unbound");
+			let matched = false;
+			for (const graph of graphs) {
+				if (!within$1(graph.modules, packageRoot)) continue;
+				if (![...graph.graph.reachable].filter((key) => key === name || key.startsWith(name + "@")).find((key) => {
+					const targetUrl = graph.graph.records[key]?.url;
+					return typeof targetUrl === "string" && realpathSync$1(resolve(graph.modules, targetUrl)) === packageRoot;
+				})) continue;
+				const matches = lockRows(graph.root, name).filter((row$3) => row$3.version === targetManifest.version && row$3.integrity);
+				if (targetManifest.name === name && matches.length === 1) {
+					observed.push(matches[0]);
+					matched = true;
+				}
+			}
+			if (!matched) throw new HostProfileError("host_contract_probe_dependency_unbound", "probe dependency lacks an exact installed registry identity");
 		}
 	}
-	throw new HostProfileError("host_contract_probe_dependency_unbound", "probe dependency lacks an exact installed registry identity");
+	const identity = observed[0];
+	if (!identity || observed.some((row$3) => row$3.name !== identity.name || row$3.version !== identity.version || row$3.integrity !== identity.integrity)) throw new HostProfileError("host_contract_probe_dependency_unbound", "importer routes resolve to conflicting identities");
+	return identity;
 }
 /** Byte and dual-lane route audit over both graphs. Expectations are either
 * the published baseline or operator-owned, registry-acquired qualified module
@@ -20743,7 +22271,13 @@ function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, ex
 			graphs.push(graph);
 			const index$1 = reachableIdsByName(graph, session);
 			for (const expected of expectedPackages) {
-				const ids = index$1.get(expected.name) ?? [];
+				let ids = index$1.get(expected.name) ?? [];
+				if (!CRITICAL_NAMES.includes(expected.name) && expected.version !== void 0 && ids.length > 1) ids = ids.filter((id) => {
+					const url$1 = records[id]?.url;
+					if (typeof url$1 !== "string" || !url$1.startsWith("./")) return false;
+					const root$1 = session.realpath(resolve(modules, url$1));
+					return root$1.startsWith(`${modules}${sep}`) && session.readJson(join(root$1, "package.json")).version === expected.version;
+				});
 				if (ids.length > 1) return false;
 				if (!ids.length) continue;
 				const url = records[ids[0]]?.url;
@@ -21111,7 +22645,7 @@ function inspectTargetHostGraph(runtime, profile, trust) {
 async function prepareTargetHostTrust(runtime, profile, fetcher = fetch) {
 	return acquireHostTrust(readTargetHostGraph(runtime, profile).packages, fetcher, {
 		profileRoot: profile,
-		dependencyIdentity: (name, importer) => probeDependencyIdentity(runtime, profile, name, importer)
+		dependencyIdentity: probeDependencyResolver(runtime, profile)
 	});
 }
 /** Read and validate the actual runtime graph plus the installed profile plugin. */
@@ -21337,23 +22871,37 @@ function revalidateDesktopCoreLock(appAsarPath, profileRoot, expected, trustText
 * and host-contract probe a CLI rebind uses. */
 async function prepareDesktopHostTrust(appAsarPath, profileRoot, fetcher = fetch) {
 	const runtime = readDesktopAppRuntime(appAsarPath);
+	const deadline = AbortSignal.timeout(HOST_TRUST_DURATION_MS);
+	const session = createHostAuditSession();
 	const qualified = [];
+	const integrityCache = /* @__PURE__ */ new Map();
+	const integrityFor = (name, version$1) => {
+		const key = `${name}@${version$1}`;
+		let value = integrityCache.get(key);
+		if (!value) {
+			value = desktopDependencyIntegrity(name, version$1, fetcher, deadline);
+			integrityCache.set(key, value);
+		}
+		return value;
+	};
 	for (const row$3 of runtime.rows) {
 		if (!row$3.version) throw new HostTrustError("host_trust_identity_invalid");
 		qualified.push({
 			name: row$3.name,
 			version: row$3.version,
-			integrity: await desktopDependencyIntegrity(row$3.name, row$3.version, fetcher)
+			integrity: await integrityFor(row$3.name, row$3.version)
 		});
 	}
 	return acquireHostTrust(qualified, fetcher, {
 		profileRoot,
-		dependencyIdentity: async (name) => {
-			const identity = readDesktopDependency(appAsarPath, name);
+		signal: deadline,
+		dependencyIdentity: async (name, importer, _signal, importerIdentity) => {
+			if (readDesktopDependency(appAsarPath, importer, session).version !== importerIdentity.version) throw new HostTrustError("host_contract_probe_dependency_unbound", "importer identity differs from the app graph");
+			const identity = readDesktopDependency(appAsarPath, name, session, importer);
 			if (!identity.version) throw new HostTrustError("host_trust_identity_invalid");
 			return {
 				...identity,
-				integrity: await desktopDependencyIntegrity(identity.name, identity.version, fetcher)
+				integrity: await integrityFor(identity.name, identity.version)
 			};
 		}
 	});
@@ -21362,13 +22910,22 @@ async function prepareDesktopHostTrust(appAsarPath, profileRoot, fetcher = fetch
 * graph. The registry metadata must agree with the graph identity on both
 * fields before its dist.integrity is accepted; a missing or mismatching
 * identity fails closed instead of relaxing the integrity requirement. */
-async function desktopDependencyIntegrity(name, version$1, fetcher = fetch) {
-	const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version$1)}`, {
-		signal: AbortSignal.timeout(3e4),
-		redirect: "error"
-	});
-	if (!response.ok) throw new HostTrustError("host_trust_registry_unavailable");
-	const metadata$1 = await response.json();
+async function desktopDependencyIntegrity(name, version$1, fetcher = fetch, deadline) {
+	const timeout = AbortSignal.timeout(3e4);
+	const signal = deadline ? AbortSignal.any([deadline, timeout]) : timeout;
+	let response;
+	try {
+		response = await awaitSignal(fetcher(`https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version$1)}`, {
+			signal,
+			redirect: "error"
+		}), signal);
+	} catch (error) {
+		if (error instanceof HostTrustError) throw error;
+		throw new HostTrustError("host_trust_registry_unavailable", `package ${name}@${version$1}: metadata request failed`);
+	}
+	const detail = `package ${name}@${version$1}: metadata request failed`;
+	if (!response.ok) throw new HostTrustError("host_trust_registry_unavailable", detail);
+	const metadata$1 = parseRegistryMetadata(await readBoundedResponse(response, 4 * 1024 * 1024, "host_trust_registry_metadata_too_large", signal, detail), detail);
 	const integrity = metadata$1.dist?.integrity;
 	if (metadata$1.name !== name || metadata$1.version !== version$1 || typeof integrity !== "string") throw new HostTrustError("host_trust_registry_identity_mismatch");
 	return integrity;
@@ -35566,17 +37123,17 @@ var observation_schema_default = {
 
 //#endregion
 //#region src/core-v2/schema.ts
-function validate(value, schema$8, path$1) {
-	if (Array.isArray(schema$8.anyOf)) {
-		for (const option of schema$8.anyOf) try {
+function validate(value, schema$9, path$1) {
+	if (Array.isArray(schema$9.anyOf)) {
+		for (const option of schema$9.anyOf) try {
 			validate(value, option, path$1);
 			return;
 		} catch {}
 		throw new Error(`${path$1}: no_matching_schema`);
 	}
-	if ("const" in schema$8 && value !== schema$8.const) throw new Error(`${path$1}: wrong_constant`);
-	if (Array.isArray(schema$8.enum) && !schema$8.enum.includes(value)) throw new Error(`${path$1}: unknown_enum`);
-	const kinds = Array.isArray(schema$8.type) ? schema$8.type : schema$8.type === void 0 ? [] : [schema$8.type];
+	if ("const" in schema$9 && value !== schema$9.const) throw new Error(`${path$1}: wrong_constant`);
+	if (Array.isArray(schema$9.enum) && !schema$9.enum.includes(value)) throw new Error(`${path$1}: unknown_enum`);
+	const kinds = Array.isArray(schema$9.type) ? schema$9.type : schema$9.type === void 0 ? [] : [schema$9.type];
 	const matches = (kind) => {
 		switch (kind) {
 			case "null": return value === null;
@@ -35590,14 +37147,14 @@ function validate(value, schema$8, path$1) {
 	};
 	if (kinds.length && !kinds.some(matches)) throw new Error(`${path$1}: wrong_type`);
 	if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-		const fields = schema$8.properties ?? {};
+		const fields = schema$9.properties ?? {};
 		const row$3 = value;
-		if (schema$8.additionalProperties === false && Object.keys(row$3).some((key) => !(key in fields))) throw new Error(`${path$1}: unknown_fields`);
-		if (Array.isArray(schema$8.required) && schema$8.required.some((key) => !(key in row$3))) throw new Error(`${path$1}: missing_fields`);
+		if (schema$9.additionalProperties === false && Object.keys(row$3).some((key) => !(key in fields))) throw new Error(`${path$1}: unknown_fields`);
+		if (Array.isArray(schema$9.required) && schema$9.required.some((key) => !(key in row$3))) throw new Error(`${path$1}: missing_fields`);
 		for (const [key, child] of Object.entries(row$3)) if (key in fields) validate(child, fields[key], `${path$1}.${key}`);
-	} else if (Array.isArray(value) && schema$8.items) for (const child of value) validate(child, schema$8.items, `${path$1}[]`);
+	} else if (Array.isArray(value) && schema$9.items) for (const child of value) validate(child, schema$9.items, `${path$1}[]`);
 	else if (typeof value === "string") {
-		if (value.length < (schema$8.minLength ?? 0) || typeof schema$8.pattern === "string" && !new RegExp(schema$8.pattern).test(value)) throw new Error(`${path$1}: invalid_string`);
+		if (value.length < (schema$9.minLength ?? 0) || typeof schema$9.pattern === "string" && !new RegExp(schema$9.pattern).test(value)) throw new Error(`${path$1}: invalid_string`);
 		for (let i$1 = 0; i$1 < value.length; i$1++) {
 			const c = value.charCodeAt(i$1);
 			if (c >= 55296 && c <= 56319) {
@@ -35605,12 +37162,12 @@ function validate(value, schema$8, path$1) {
 			} else if (c >= 56320 && c <= 57343) throw new Error(`${path$1}: invalid_string`);
 		}
 	} else if (typeof value === "number") {
-		if (typeof schema$8.minimum === "number" && value < schema$8.minimum || typeof schema$8.maximum === "number" && value > schema$8.maximum) throw new Error(`${path$1}: number_out_of_range`);
+		if (typeof schema$9.minimum === "number" && value < schema$9.minimum || typeof schema$9.maximum === "number" && value > schema$9.maximum) throw new Error(`${path$1}: number_out_of_range`);
 	}
 }
 /** Validate the frozen core observation schema without adding a JSON Schema runtime dependency. */
-function validateCoreSnapshot(value, schema$8) {
-	validate(value, schema$8, "$");
+function validateCoreSnapshot(value, schema$9) {
+	validate(value, schema$9, "$");
 }
 
 //#endregion
@@ -39759,7 +41316,7 @@ async function inspectActivationInventory(persistence) {
 	return identities.sort((a, b) => a.id.localeCompare(b.id));
 }
 function prepareActivationMigration(inventory, prior, universeIds = inventory.map((i$1) => i$1.id)) {
-	if (!prior || prior.schema !== "dsh-activation-prior-modes/v1" || prior.previousPackage?.name !== "dsh-completion-guard" || !(/^0\.(?:[0-9]|1[012])\.\d+(?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version) || /^0\.13\.[01](?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version)) || !/^[a-f0-9]{64}$/u.test(prior.previousPackage.sha256) || !/^[a-f0-9]{64}$/u.test(prior.sourceSha256) || !Array.isArray(prior.cohorts) || !prior.cohorts.length) throw new Error("activation_prior_modes_invalid");
+	if (!prior || prior.schema !== "dsh-activation-prior-modes/v1" || prior.previousPackage?.name !== "dsh-completion-guard" || !(/^0\.(?:[0-9]|1[012])\.\d+(?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version) || /^0\.13\.[012](?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version)) || !/^[a-f0-9]{64}$/u.test(prior.previousPackage.sha256) || !/^[a-f0-9]{64}$/u.test(prior.sourceSha256) || !Array.isArray(prior.cohorts) || !prior.cohorts.length) throw new Error("activation_prior_modes_invalid");
 	if (new Set(inventory.map((i$1) => i$1.id)).size !== inventory.length || !inventory.length) throw new Error("activation_inventory_invalid");
 	const universe = new Set(universeIds);
 	if (universe.size !== universeIds.length || inventory.some((i$1) => !universe.has(i$1.id))) throw new Error("activation_inventory_invalid");
@@ -40661,20 +42218,20 @@ function assertActivationCatalogQualification(backendFile, review) {
 	try {
 		if (process.env.NODE_OPTIONS || process.execArgv.some((arg) => /^(?:--conditions(?:=|$)|--experimental-loader(?:=|$)|--loader(?:=|$)|--import(?:=|$)|--require(?:=|$)|-r|--preserve-symlinks(?:-main)?(?:=|$))/u.test(arg))) fail();
 		if (!review || review.schema !== "dsh-activation-catalog-qualification/v1" || !Array.isArray(review.packages) || !Array.isArray(review.modules) || review.packages.length === 0 || review.modules.length === 0) fail();
-		const packages$8 = /* @__PURE__ */ new Map(), modules = /* @__PURE__ */ new Map();
+		const packages$9 = /* @__PURE__ */ new Map(), modules = /* @__PURE__ */ new Map();
 		for (const p of review.packages) {
-			if (!p || typeof p.name !== "string" || !/^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/u.test(p.name) || !HASH.test(p.loaderShapeSha256) || packages$8.has(p.name)) fail();
-			packages$8.set(p.name, p);
+			if (!p || typeof p.name !== "string" || !/^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/u.test(p.name) || !HASH.test(p.loaderShapeSha256) || packages$9.has(p.name)) fail();
+			packages$9.set(p.name, p);
 		}
 		for (const m of review.modules) {
-			if (!m || !packages$8.has(m.package) || !relativeModule(m.path) || m.key !== `${m.package}::${m.path}` || !HASH.test(m.sha256) || !Array.isArray(m.edges) || modules.has(m.key)) fail();
+			if (!m || !packages$9.has(m.package) || !relativeModule(m.path) || m.key !== `${m.package}::${m.path}` || !HASH.test(m.sha256) || !Array.isArray(m.edges) || modules.has(m.key)) fail();
 			modules.set(m.key, m);
 		}
 		const entry = modules.get(review.entry);
 		if (!entry || entry.package !== "@deepseek-ai/dsh-session-format-catalog") fail();
 		const roots = /* @__PURE__ */ new Map(), manifestDigests = /* @__PURE__ */ new Map();
 		const packageRoot = (importer, name) => {
-			const reviewed = packages$8.get(name);
+			const reviewed = packages$9.get(name);
 			if (!reviewed) fail();
 			let ancestor = dirname(realpathSync(importer)), localManifest;
 			for (;;) {
@@ -40756,7 +42313,7 @@ function assertActivationCatalogQualification(backendFile, review) {
 				}
 			}
 		}
-		if (paths.size !== modules.size || roots.size !== packages$8.size) fail();
+		if (paths.size !== modules.size || roots.size !== packages$9.size) fail();
 		const qualificationSha256 = activationDigest({
 			schema: review.schema,
 			modules: [...paths].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, file]) => ({
@@ -40784,4 +42341,4 @@ function assertActivationCatalogQualification(backendFile, review) {
 }
 
 //#endregion
-export { PROTOCOL_V3_NOTICE as $, isStatefulAction as $a, memoizedAsarFile as $i, confirmRebind as $n, isInformationalFragment as $r, CLEANUP_CONDITION_RULE_SHORT as $t, executeRevalidatedGitEffect as A, hostVersionFromPackages as Aa, evaluateConfiguredHostLock as Ai, decisionBoundaryKey as An, privateLedgerTargetDigest as Ao, isInformationalMessage as Ar, PROOF_MANIFEST_DOMAIN_V2 as At, previewFirstStepInjection as B, satisfiesSupportedHostRange as Ba, prepareDesktopHostTrust as Bi, hasCurrentCertificate as Bn, releaseCoverage as Bo, clauseAsksOwnQuestion as Br, proofDigestV2 as Bt, RC020_RC2_HOST_PACKAGES as C, bindExecutableIdentity as Ca, activeRendererModule as Ci, NO_PROGRESS_TURNS_BEFORE_STOP as Cn, sessionBirthIdentity as Co, captureClause as Cr, authorityCaptureCounts as Ct, commitIndexSnapshotDigest as D, evaluateHostCapability as Da, auditedHostImplementation as Di, currentActionBases as Dn, hasPrivateRestartIntent as Do, extractArtifactPaths as Dr, PROOF_CAPABILITY_MATRIX as Dt, GIT_COMMAND_TEMPLATES as E, evaluateGraphDerivedHostLock as Ea, auditedForegroundRenderers as Ei, classifyCompletionClaim as En, applyPrivateLedger as Eo, environmentDefaultRepositoryTarget as Er, certifyCheckpoint as Et, FIRST_STEP_GUIDANCE as F, SUPPORTED_HOST_RANGE as Fa, inspectProfileHostLockPatch as Fi, observeAssistantOutcome as Fn, contractById as Fo, classifyUserInteraction as Fr, canonicalProjection as Ft, sourcedNamedTestRoot as G, CERTIFICATE_VERSION_V2 as Ga, resolveInstalledHostLock as Gi, unitDescendantIds as Gn, normalizeClause as Go, hasOrderedCoordination as Gr, requiredSubjectsOf as Gt, sessionCoreSnapshot as H, ACTION_MANIFEST_VERSION as Ha, readActiveHostGraph as Hi, certifiableOpenItems as Hn, reservationFor as Ho, clauseIsProtected as Hr, proofHostSurfacesOf as Ht, claimedBatchHasRealRootInput as I, SUPPORTED_HOST_VERSIONS as Ia, inspectTargetHostGraph as Ii, progressFingerprint as In, inFlightReservation as Io, GRANTED_QUALIFICATION as Ir, createProofManifest as It, SessionApiError as J, STOP_PROTOCOL_VERSION as Ja, DESKTOP_IDENTITY_FACTS as Ji, effectuateBoundary as Jn, sha256 as Jo, interpretClause as Jr, sessionQueryV2 as Jt, SESSION_API_UNSUPPORTED as K, SEMANTIC_ACTIONS as Ka, revalidateDesktopCoreLock as Ki, BOUNDARY_RECORD_PREFIX as Kn, sanitizeClauseText as Ko, hasQuestionScope as Kr, scopeCoverageDigest as Kt, firstStepGuidance as L, compareHostVersions as La, packageRowsFromActiveGraph as Li, testOutcomePredicate as Ln, normalizeReleaseContract as Lo, LEGACY_QUALIFICATION as Lr, createProofManifestV2 as Lt, parseGitCommandManifest as M, HOST_VALIDATED_VERSIONS as Ma, hostLockRowsFromComposedDump as Mi, isWholeTaskCompletionClaim as Mn, resolvePrivateLedgerRoot as Mo, canonicalRegistryBase as Mr, PROOF_PROTOCOL_VERSION_V2 as Mt, revalidateGitPrestate as N, LATEST_TESTED_HOST_VERSION as Na, injectActiveProfileHostLock as Ni, latestAssistantText as Nn, RELEASE_OPERATIONS as No, npmEscapedPackageName as Nr, bindProofToProjection as Nt, commitTreeSnapshotDigest as O, evaluateHostLock as Oa, combineHostPolicy as Oi, decideTurnBoundary as On, initializePrivateLedger as Oo, extractMethod as Or, PROOF_KINDS as Ot, verifiedLinearCommitReadback as P, MIN_SUPPORTED_HOST_VERSION as Pa, inspectDesktopTargetGraph as Pi, latestRootInstruction as Pn, RELEASE_OPERATION_SURFACES as Po, classifyTaskIntent as Pr, bindProofV2ToProjection as Pt, DEFAULT_DELEGATION_TOOL_NAMES as Q, boundedArtifactChoiceMatches as Qa, hasDesktopImporterState as Qi, createProjection as Qn, isExplanationScope as Qr, CLEANUP_CONDITION_RULE_COMPACT as Qt, firstStepGuidanceV6 as R, evaluateMinimumHostVersion as Ra, packageRowsFromPnpmLock as Ri, v6TestPredicate as Rn, readbackSettlesContract as Ro, actionVerbMatches as Rr, proofCapabilityReport as Rt, RC021_RC2_HOST_PACKAGES as S, HOST_COHORTS as Sa, HostProfileError as Si, NO_PROGRESS_RECORD_PREFIX as Sn, activationJson as So, removalIsPartiallyKnown as Sr, effectiveCwdAt as St, GIT_COMMAND_MANIFEST_IDS as T, evaluateExternalWaitCapability as Ta, auditedDefaultWorkdirProvider as Ti, assessmentOutcomePredicate as Tn, appendPrivateLedger as To, classifyClause as Tr, bindingIndividuallyAccepted as Tt, HOST_WORKDIR_PREFIX as U, BOUNDED_ARTIFACT_TYPES as Ua, resolveActiveProfileHostLock as Ui, certificateClosure as Un, canonicalizePath as Uo, explanationHasActionResidue as Ur, proofOperationMatches as Ut, projectSessionCoreV2 as V, ACTION_MANIFEST as Va, prepareTargetHostTrust as Vi, ancestorConstraintForBinding as Vn, releasePreEffectDecision as Vo, clauseIsGoverned as Vr, proofEvidenceConstraints as Vt, captureHostWorkdir as W, CERTIFICATE_VERSION as Wa, resolveDesktopProfileHostLock as Wi, needsReviewObligations as Wn, digestStrings as Wo, governedClauseRestrictsExecution as Wr, proofV2Rejection as Wt, projectCoreV2 as X, SUPPORTED_EVIDENCE_ADAPTERS as Xa, DESKTOP_RUNTIME_PACKAGE_NAME as Xi, qualifyBoundary as Xn, privateStorageToolDenial as Xo, introducesActionClause as Xr, validateProofManifestV2 as Xt, snapshotSessionEvents as Y, STOP_PROTOCOL_VERSION_V2 as Ya, DESKTOP_PROFILE_PACKAGE_NAME as Yi, isCurrentAcceptedBoundary as Yn, stripUrlCredentials as Yo, interpretMessage as Yr, validateProofManifest as Yt, CAPTURE_V042_NOTICE as Z, actionCompatible as Za, auditDesktopInstalledImplementation as Zi, currentContractDigest as Zn, ownedJobLifecycle as Zo, isExecutableItem as Zr, CLEANUP_CONDITION_RULE as Zt, validateActivationSelection as _, BASE_HOST_PACKAGES as _a, splitTextFragments as _i, bindingSatisfies as _n, resolveSessionActivation as _o, admissibleForRemoval as _r, canonicalArgvFromCommand as _t, captureActivationPhysicalInventory as a, readDesktopTargetGraph as aa, legacyQuestionReadingIsInformational as ai, carriesCleanupCondition as an, validateActionManifest as ao, replayRebindResult as ar, legacyRecordsNeedingReview as at, prepareActivationMigration as b, GOAL_HOST_PACKAGES as ba, COMMAND_SURFACE_MANIFEST as bi, isVerifyingCapability as bn, activationCanonical as bo, partialFailureOf as br, parseShellCommand as bt, verifyActivationPhysicalInventory as c, acquireHostTrust as ca, namedActions as ci, openItems as cn, RC021_RC3_HOST_PACKAGES as co, parseConfirmationMessage as cr, NATIVE_GIT_ROOT_PARENT_OID as ct, createActivationSelection as d, qualifyHostTrust as da, presentExplanationHead as di, renderRecoveryPacket as dn, activationBindingPath as do, evidenceAvailabilityReason as dr, extractToolSubject as dt, memoizedAsarIndex as ea, isOpenObligation as ei, DEFAULT_RECOVERY_CHAR_BUDGET as en, requestedIdentityKey as eo, proposeRebind as er, PROTOCOL_V4_NOTICE as et, isSelectedActivationReceipt as f, registryArchiveFiles as fa, qualificationOfClause as fi, v6CurrentRootBoundaries as fn, adoptActivationReceipt as fo, itemDiagnosis as fr, isDeterministicCheck as ft, validateActivationInventorySnapshot as g, ACTIVE_HOST_LAUNCHER_VERSION as ga, semanticActionOfScope as gi, sourceItemForCoreRequirement as gn, resolveActivationBindingsRoot as go, actionHasCertificationPath as gr, withDurability as gt, selectedActivationInventory as h, ACTIVE_HOST_COHORT_IDS as ha, restatedContentOf as hi, isV6PendingRootWait as hn, readActivationMigrationReceipt as ho, DEPENDENCY_FREE_ONLY_CONDITION as hr, shellReadbackOutcome as ht, assertActivationPhysicalRows as i, readDesktopDependency as ia, kindOfScope as ii, V6_ORDINARY_COMPLETION_RULE_SHORT as in, semanticActionFromText as io, rebindResponse as ir, deriveProjection as it, gitCommandMatchesTarget as j, selectHostCohort as ja, hostLockContextFromComposedDump as ji, isRootPauseRequest as jn, readPrivateLedger as jo, segmentClauses as jr, PROOF_PROTOCOL_VERSION as jt, createGitPrestateEnvelope as k, evaluateToolSurfaceCapability as ka, evaluateActiveHostLock as ki, decideTurnStopping as kn, privateLedgerContractDigest as ko, extractOperation as kr, PROOF_KINDS_V2 as kt, activationSelectionPending as l, hostTrustDigest as la, opensConditionLead as li, recoveryDigest as ln, createHostAuditSession as lo, capabilityRemedyPhrase as lr, evidenceFromPersistedToolResult as lt, scanActivationInventory as m, ACTIVE_HOST_COHORT_ID as ma, reportingHeadGoverns as mi, currentV6Feedback as mn, readActivationBinding as mo, relevantEvidence as mr, persistedToolResultStatus as mt, verifyActivationGenerations as n, readAsarIndex as na, isRestatement as ni, V6_ORDINARY_COMPLETION_RULE as nn, requestedTargetMatchesResolved as no, proposeRebindV042 as nr, PROTOCOL_V6_NOTICE as nt, guardActivationInventory as o, writeDesktopRuntimeReceipt as oa, maskCodeSpans as oi, cleanupConditionFor as on, validateActionTarget as oo, CONFIRM_LINE_PATTERN as or, rootLocatorFlavor as ot, prepareSelectedActivationMigration as p, registryArchiveModules as pa, questionHeadsClause as pi, confirmedV6CoreDiagnostic as pn, createActivationMigrationReceipt as po, nativeFileTwoRole as pr, nativeGitParentOidVerified as pt, SESSION_EVENT_ENVELOPE_INVALID as q, STATEFUL_ACTIONS as qa, verifyComposedHostLockDump as qi, availableBoundaryQualifications as qn, sanitizeUrl as qo, hasWorkPredicate as qr, sessionQuery as qt, assertActivationBackendIdentity as r, readDesktopAppRuntime as ra, itemHoldsExecutionAuthority as ri, V6_ORDINARY_COMPLETION_RULE_COMPACT as rn, semanticActionFromCommand as ro, rebindAttemptKey as rr, applyUpgradeEligibility as rt, resolveActivationPersistencePlugin as s, HostTrustError as sa, maskQuotedSpans as si, closingHint as sn, RC021_RC5_HOST_PACKAGES as so, isFrozenV042RebindResponse as sr, supersedeItem as st, assertActivationCatalogQualification as t, readAsarFile as ta, isQuestionScopeNeedingReview as ti, MIN_RECOVERY_CHAR_BUDGET as tn, requestedTargetAuthorizesMutation as to, proposeRebindOutcome as tr, PROTOCOL_V5_NOTICE as tt, bindActivationInventoryPhysical as u, parseHostTrust as ua, opensWithDirective as ui, recoveryTitle as un, __activationBindingInternals as uo, deriveItemDiagnosis as ur, extractTextContent as ut, verifySelectedMigrationInventory as v, DEFAULT_HOST_LOCK as va, statefulActionsOfScope as vi, evidenceCoverage as vn, validateActivationMigrationReceipt as vo, capabilityConsequence as vr, isRunExecutable as vt, RC020_RC1_HOST_PACKAGES as w, bindLiveGoalCapability as wa, auditedDefaultWorkdirHost as wi, assessmentAction as wn, validateActivationBinding as wo, captureItem as wr, segmentAuthorityBlocks as wt, verifyMigrationInventory as x, HOST_CAPABILITY_PACKAGE_GROUPS as xa, validateManifest as xi, CONTROL_RECORD_PREFIX as xn, activationDigest as xo, removalIsComplete as xr, cwdEpochsFromEvents as xt, inspectActivationInventory as y, EXPECTED_HOST_PACKAGES as ya, verbIsNegated as yi, evidenceMatchesItem as yn, writeActivationBinding as yo, capabilityFactOf as yr, parsePwshCommand as yt, lifecyclePhase as z, parseHostVersion as za, prepareActiveHostTrust as zi, goalCompletionDenial as zn, releaseContractFor as zo, clarifiedSpanOf as zr, proofDigest as zt };
+export { PROTOCOL_V3_NOTICE as $, STOP_PROTOCOL_VERSION as $a, hasDesktopImporterState as $i, confirmRebind as $n, sha256 as $o, isInformationalFragment as $r, CLEANUP_CONDITION_RULE_SHORT as $t, executeRevalidatedGitEffect as A, evaluateExternalWaitCapability as Aa, evaluateConfiguredHostLock as Ai, decisionBoundaryKey as An, appendPrivateLedger as Ao, isInformationalMessage as Ar, PROOF_MANIFEST_DOMAIN_V2 as At, previewFirstStepInjection as B, SUPPORTED_HOST_RANGE as Ba, prepareDesktopHostTrust as Bi, hasCurrentCertificate as Bn, contractById as Bo, clauseAsksOwnQuestion as Br, proofDigestV2 as Bt, RC020_RC2_HOST_PACKAGES as C, DEFAULT_HOST_LOCK as Ca, activeRendererModule as Ci, NO_PROGRESS_TURNS_BEFORE_STOP as Cn, validateActivationMigrationReceipt as Co, captureClause as Cr, authorityCaptureCounts as Ct, commitIndexSnapshotDigest as D, HOST_COHORTS as Da, auditedHostImplementation as Di, currentActionBases as Dn, activationJson as Do, extractArtifactPaths as Dr, PROOF_CAPABILITY_MATRIX as Dt, GIT_COMMAND_TEMPLATES as E, HOST_CAPABILITY_PACKAGE_GROUPS as Ea, auditedForegroundRenderers as Ei, classifyCompletionClaim as En, activationDigest as Eo, environmentDefaultRepositoryTarget as Er, certifyCheckpoint as Et, FIRST_STEP_GUIDANCE as F, hostVersionFromPackages as Fa, inspectProfileHostLockPatch as Fi, observeAssistantOutcome as Fn, privateLedgerTargetDigest as Fo, classifyUserInteraction as Fr, canonicalProjection as Ft, sourcedNamedTestRoot as G, satisfiesSupportedHostRange as Ga, resolveDesktopProfileHostLock as Gi, unitDescendantIds as Gn, releaseCoverage as Go, hasOrderedCoordination as Gr, requiredSubjectsOf as Gt, sessionCoreSnapshot as H, compareHostVersions as Ha, probeDependencyResolver as Hi, certifiableOpenItems as Hn, normalizeReleaseContract as Ho, clauseIsProtected as Hr, proofHostSurfacesOf as Ht, claimedBatchHasRealRootInput as I, selectHostCohort as Ia, inspectTargetHostGraph as Ii, progressFingerprint as In, readPrivateLedger as Io, GRANTED_QUALIFICATION as Ir, createProofManifest as It, SessionApiError as J, BOUNDED_ARTIFACT_TYPES as Ja, verifyComposedHostLockDump as Ji, effectuateBoundary as Jn, canonicalizePath as Jo, interpretClause as Jr, sessionQueryV2 as Jt, SESSION_API_UNSUPPORTED as K, ACTION_MANIFEST as Ka, resolveInstalledHostLock as Ki, BOUNDARY_RECORD_PREFIX as Kn, releasePreEffectDecision as Ko, hasQuestionScope as Kr, scopeCoverageDigest as Kt, firstStepGuidance as L, HOST_VALIDATED_VERSIONS as La, packageRowsFromActiveGraph as Li, testOutcomePredicate as Ln, resolvePrivateLedgerRoot as Lo, LEGACY_QUALIFICATION as Lr, createProofManifestV2 as Lt, parseGitCommandManifest as M, evaluateHostCapability as Ma, hostLockRowsFromComposedDump as Mi, isWholeTaskCompletionClaim as Mn, hasPrivateRestartIntent as Mo, canonicalRegistryBase as Mr, PROOF_PROTOCOL_VERSION_V2 as Mt, revalidateGitPrestate as N, evaluateHostLock as Na, injectActiveProfileHostLock as Ni, latestAssistantText as Nn, initializePrivateLedger as No, npmEscapedPackageName as Nr, bindProofToProjection as Nt, commitTreeSnapshotDigest as O, bindExecutableIdentity as Oa, combineHostPolicy as Oi, decideTurnBoundary as On, sessionBirthIdentity as Oo, extractMethod as Or, PROOF_KINDS as Ot, verifiedLinearCommitReadback as P, evaluateToolSurfaceCapability as Pa, inspectDesktopTargetGraph as Pi, latestRootInstruction as Pn, privateLedgerContractDigest as Po, classifyTaskIntent as Pr, bindProofV2ToProjection as Pt, DEFAULT_DELEGATION_TOOL_NAMES as Q, STATEFUL_ACTIONS as Qa, auditDesktopInstalledImplementation as Qi, createProjection as Qn, sanitizeUrl as Qo, isExplanationScope as Qr, CLEANUP_CONDITION_RULE_COMPACT as Qt, firstStepGuidanceV6 as R, LATEST_TESTED_HOST_VERSION as Ra, packageRowsFromPnpmLock as Ri, v6TestPredicate as Rn, RELEASE_OPERATIONS as Ro, actionVerbMatches as Rr, proofCapabilityReport as Rt, RC021_RC2_HOST_PACKAGES as S, BASE_HOST_PACKAGES as Sa, HostProfileError as Si, NO_PROGRESS_RECORD_PREFIX as Sn, resolveSessionActivation as So, removalIsPartiallyKnown as Sr, effectiveCwdAt as St, GIT_COMMAND_MANIFEST_IDS as T, GOAL_HOST_PACKAGES as Ta, auditedDefaultWorkdirProvider as Ti, assessmentOutcomePredicate as Tn, activationCanonical as To, classifyClause as Tr, bindingIndividuallyAccepted as Tt, HOST_WORKDIR_PREFIX as U, evaluateMinimumHostVersion as Ua, readActiveHostGraph as Ui, certificateClosure as Un, readbackSettlesContract as Uo, explanationHasActionResidue as Ur, proofOperationMatches as Ut, projectSessionCoreV2 as V, SUPPORTED_HOST_VERSIONS as Va, prepareTargetHostTrust as Vi, ancestorConstraintForBinding as Vn, inFlightReservation as Vo, clauseIsGoverned as Vr, proofEvidenceConstraints as Vt, captureHostWorkdir as W, parseHostVersion as Wa, resolveActiveProfileHostLock as Wi, needsReviewObligations as Wn, releaseContractFor as Wo, governedClauseRestrictsExecution as Wr, proofV2Rejection as Wt, projectCoreV2 as X, CERTIFICATE_VERSION_V2 as Xa, DESKTOP_PROFILE_PACKAGE_NAME as Xi, qualifyBoundary as Xn, normalizeClause as Xo, introducesActionClause as Xr, validateProofManifestV2 as Xt, snapshotSessionEvents as Y, CERTIFICATE_VERSION as Ya, DESKTOP_IDENTITY_FACTS as Yi, isCurrentAcceptedBoundary as Yn, digestStrings as Yo, interpretMessage as Yr, validateProofManifest as Yt, CAPTURE_V042_NOTICE as Z, SEMANTIC_ACTIONS as Za, DESKTOP_RUNTIME_PACKAGE_NAME as Zi, currentContractDigest as Zn, sanitizeClauseText as Zo, isExecutableItem as Zr, CLEANUP_CONDITION_RULE as Zt, validateActivationSelection as _, registryArchiveFiles as _a, splitTextFragments as _i, bindingSatisfies as _n, adoptActivationReceipt as _o, admissibleForRemoval as _r, canonicalArgvFromCommand as _t, captureActivationPhysicalInventory as a, readDesktopDependency as aa, legacyQuestionReadingIsInformational as ai, carriesCleanupCondition as an, requestedIdentityKey as ao, replayRebindResult as ar, legacyRecordsNeedingReview as at, prepareActivationMigration as b, ACTIVE_HOST_COHORT_IDS as ba, COMMAND_SURFACE_MANIFEST as bi, isVerifyingCapability as bn, readActivationMigrationReceipt as bo, partialFailureOf as br, parseShellCommand as bt, verifyActivationPhysicalInventory as c, HOST_TRUST_DURATION_MS as ca, namedActions as ci, openItems as cn, semanticActionFromCommand as co, parseConfirmationMessage as cr, NATIVE_GIT_ROOT_PARENT_OID as ct, createActivationSelection as d, awaitSignal as da, presentExplanationHead as di, renderRecoveryPacket as dn, validateActionTarget as do, evidenceAvailabilityReason as dr, extractToolSubject as dt, memoizedAsarFile as ea, isOpenObligation as ei, DEFAULT_RECOVERY_CHAR_BUDGET as en, STOP_PROTOCOL_VERSION_V2 as eo, proposeRebind as er, stripUrlCredentials as es, PROTOCOL_V4_NOTICE as et, isSelectedActivationReceipt as f, hostTrustDigest as fa, qualificationOfClause as fi, v6CurrentRootBoundaries as fn, RC021_RC5_HOST_PACKAGES as fo, itemDiagnosis as fr, isDeterministicCheck as ft, validateActivationInventorySnapshot as g, readBoundedResponse as ga, semanticActionOfScope as gi, sourceItemForCoreRequirement as gn, activationBindingPath as go, actionHasCertificationPath as gr, withDurability as gt, selectedActivationInventory as h, qualifyHostTrust as ha, restatedContentOf as hi, isV6PendingRootWait as hn, __activationBindingInternals as ho, DEPENDENCY_FREE_ONLY_CONDITION as hr, shellReadbackOutcome as ht, assertActivationPhysicalRows as i, readDesktopAppRuntime as ia, kindOfScope as ii, V6_ORDINARY_COMPLETION_RULE_SHORT as in, isStatefulAction as io, rebindResponse as ir, deriveProjection as it, gitCommandMatchesTarget as j, evaluateGraphDerivedHostLock as ja, hostLockContextFromComposedDump as ji, isRootPauseRequest as jn, applyPrivateLedger as jo, segmentClauses as jr, PROOF_PROTOCOL_VERSION as jt, createGitPrestateEnvelope as k, bindLiveGoalCapability as ka, evaluateActiveHostLock as ki, decideTurnStopping as kn, validateActivationBinding as ko, extractOperation as kr, PROOF_KINDS_V2 as kt, activationSelectionPending as l, HostTrustError as la, opensConditionLead as li, recoveryDigest as ln, semanticActionFromText as lo, capabilityRemedyPhrase as lr, evidenceFromPersistedToolResult as lt, scanActivationInventory as m, parseRegistryMetadata as ma, reportingHeadGoverns as mi, currentV6Feedback as mn, createHostAuditSession as mo, relevantEvidence as mr, persistedToolResultStatus as mt, verifyActivationGenerations as n, readAsarFile as na, isRestatement as ni, V6_ORDINARY_COMPLETION_RULE as nn, actionCompatible as no, proposeRebindV042 as nr, ownedJobLifecycle as ns, PROTOCOL_V6_NOTICE as nt, guardActivationInventory as o, readDesktopTargetGraph as oa, maskCodeSpans as oi, cleanupConditionFor as on, requestedTargetAuthorizesMutation as oo, CONFIRM_LINE_PATTERN as or, rootLocatorFlavor as ot, prepareSelectedActivationMigration as p, parseHostTrust as pa, questionHeadsClause as pi, confirmedV6CoreDiagnostic as pn, RC021_RC3_HOST_PACKAGES as po, nativeFileTwoRole as pr, nativeGitParentOidVerified as pt, SESSION_EVENT_ENVELOPE_INVALID as q, ACTION_MANIFEST_VERSION as qa, revalidateDesktopCoreLock as qi, availableBoundaryQualifications as qn, reservationFor as qo, hasWorkPredicate as qr, sessionQuery as qt, assertActivationBackendIdentity as r, readAsarIndex as ra, itemHoldsExecutionAuthority as ri, V6_ORDINARY_COMPLETION_RULE_COMPACT as rn, boundedArtifactChoiceMatches as ro, rebindAttemptKey as rr, applyUpgradeEligibility as rt, resolveActivationPersistencePlugin as s, writeDesktopRuntimeReceipt as sa, maskQuotedSpans as si, closingHint as sn, requestedTargetMatchesResolved as so, isFrozenV042RebindResponse as sr, supersedeItem as st, assertActivationCatalogQualification as t, memoizedAsarIndex as ta, isQuestionScopeNeedingReview as ti, MIN_RECOVERY_CHAR_BUDGET as tn, SUPPORTED_EVIDENCE_ADAPTERS as to, proposeRebindOutcome as tr, privateStorageToolDenial as ts, PROTOCOL_V5_NOTICE as tt, bindActivationInventoryPhysical as u, acquireHostTrust as ua, opensWithDirective as ui, recoveryTitle as un, validateActionManifest as uo, deriveItemDiagnosis as ur, extractTextContent as ut, verifySelectedMigrationInventory as v, registryArchiveModules as va, statefulActionsOfScope as vi, evidenceCoverage as vn, createActivationMigrationReceipt as vo, capabilityConsequence as vr, isRunExecutable as vt, RC020_RC1_HOST_PACKAGES as w, EXPECTED_HOST_PACKAGES as wa, auditedDefaultWorkdirHost as wi, assessmentAction as wn, writeActivationBinding as wo, captureItem as wr, segmentAuthorityBlocks as wt, verifyMigrationInventory as x, ACTIVE_HOST_LAUNCHER_VERSION as xa, validateManifest as xi, CONTROL_RECORD_PREFIX as xn, resolveActivationBindingsRoot as xo, removalIsComplete as xr, cwdEpochsFromEvents as xt, inspectActivationInventory as y, ACTIVE_HOST_COHORT_ID as ya, verbIsNegated as yi, evidenceMatchesItem as yn, readActivationBinding as yo, capabilityFactOf as yr, parsePwshCommand as yt, lifecyclePhase as z, MIN_SUPPORTED_HOST_VERSION as za, prepareActiveHostTrust as zi, goalCompletionDenial as zn, RELEASE_OPERATION_SURFACES as zo, clarifiedSpanOf as zr, proofDigest as zt };

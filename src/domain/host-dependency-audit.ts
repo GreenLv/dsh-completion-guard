@@ -122,6 +122,20 @@ function selectLane(value: unknown, depth: number, lane: 'require' | 'import'): 
   return 'no-match'
 }
 
+/** The reviewed auxiliary fallback shape has a complete ordered conditions
+ * object first and repeats its require target as the final fallback. Both
+ * active lanes must resolve in the first entry; blocked or invalid entries
+ * never fall through to a later array item. */
+function exportEntry(value: unknown, independentLanes: boolean): unknown {
+  if (!Array.isArray(value)) return value
+  if (!independentLanes || value.length !== 2 || !value[0] || typeof value[0] !== 'object'
+    || Array.isArray(value[0]) || typeof value[1] !== 'string' || !rawTargetAllowed(value[1])) throw new Error('unaudited export array')
+  const required = selectLane(value[0], 0, 'require'), imported = selectLane(value[0], 0, 'import')
+  if (typeof required !== 'object' || typeof imported !== 'object' || required.target !== value[1]
+    || !rawTargetAllowed(required.target) || !rawTargetAllowed(imported.target)) throw new Error('unaudited export array')
+  return value[0]
+}
+
 /** Raw-target validation, per Node's ERR_INVALID_PACKAGE_TARGET rules. */
 function rawTargetAllowed(target: string): boolean {
   if (!target.startsWith('./') || target.includes('\\') || ENCODED_SEPARATOR.test(target)) return false
@@ -143,10 +157,10 @@ function rawTargetAllowed(target: string): boolean {
 
 /** True when every lane Node may actually load resolves to the wanted file. */
 function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; manifest: Record<string, unknown> },
-  request: string, wanted: string, selectedLane?: 'require' | 'import'): boolean {
+  request: string, wanted: string, selectedLane?: 'require' | 'import', independentLanes = false): boolean {
   const packageName = String(scope.manifest.name)
   const subpath = request === packageName ? '.' : '.' + request.slice(packageName.length)
-  const rawExports = scope.manifest.exports
+  const rawExports = Array.isArray(scope.manifest.exports) ? exportEntry(scope.manifest.exports, independentLanes) : scope.manifest.exports
   let rootTarget: unknown
   let subpathMap: Record<string, unknown> | undefined
   if (rawExports === undefined) return true
@@ -168,7 +182,7 @@ function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; ma
   let entry: unknown
   if (subpathMap !== undefined) {
     if (!Object.hasOwn(subpathMap, subpath)) return false
-    entry = subpathMap[subpath]
+    entry = exportEntry(subpathMap[subpath], independentLanes)
   } else {
     if (subpath !== '.') return false
     entry = rootTarget
@@ -199,7 +213,7 @@ function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; ma
  * both startup lanes. Wildcard source-only exports are not entrypoints. */
 function runtimeExports(manifest: Record<string, unknown>, independentLanes = false): Array<{ subpath: string; target: string; lane?: 'require' | 'import' }> {
   const result: Array<{ subpath: string; target: string; lane?: 'require' | 'import' }> = []
-  const raw = manifest.exports
+  const raw = Array.isArray(manifest.exports) ? exportEntry(manifest.exports, independentLanes) : manifest.exports
   if (raw === undefined) {
     const main = manifest.main ?? './index.js'
     if (typeof main !== 'string') throw new Error('invalid main')
@@ -212,8 +226,10 @@ function runtimeExports(manifest: Record<string, unknown>, independentLanes = fa
   const dot = keys.filter(key => key === '.' || key.startsWith('./'))
   if (dot.length && dot.length !== keys.length) throw new Error('mixed exports')
   const entries: Array<[string, unknown]> = dot.length ? Object.entries(raw as Record<string, unknown>) : [['.', raw]]
-  for (const [key, value] of entries) {
+  for (const [key, rawEntry] of entries) {
     if (key.includes('*')) continue
+    if (independentLanes && key === './' && rawEntry === './') continue
+    const value = exportEntry(rawEntry, independentLanes)
     const required = selectLane(value, 0, 'require'), imported = selectLane(value, 0, 'import')
     if (typeof required !== 'object' || typeof imported !== 'object' || (!independentLanes && required.target !== imported.target)
       || !rawTargetAllowed(required.target) || !rawTargetAllowed(imported.target)) throw new Error('unaudited export conditions')
@@ -300,9 +316,16 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
         const manifest = session.readJson(manifestPath)
         const mapped = record.dependencies as Record<string, string>
         const declared = { ...(manifest.dependencies as object), ...(manifest.peerDependencies as object), ...(manifest.optionalDependencies as object) }
-        const names = new Set([...Object.keys(declared), ...Object.keys(mapped)].filter(name => graph.packages.has(name) || installation.packages.has(name)))
-        if (names.size === 0) continue
         const own = graph.packages.get(String(manifest.name))
+        const names = new Set([...Object.keys(declared), ...Object.keys(mapped)].filter(name => {
+          const target = graph.packages.get(name) ?? installation.packages.get(name)
+          if (!target) return false
+          // Auxiliary probe packages are reached through authenticated
+          // importers. Unrelated packages may use a different version, while
+          // every critical-package route keeps the whole-graph audit.
+          return !target.independentLanes || own?.root === root
+        }))
+        if (names.size === 0) continue
         const importers = new Set([manifestPath])
         if (own?.root === root) {
           for (const file of own.files) if (/\.(?:m?js|cjs)$/.test(file)) importers.add(join(root, file))
@@ -386,7 +409,7 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
                 const scope = nearestPackageScope(session, dirname(importer))
                 const selfApplies = scope !== undefined
                   && scope.manifest.name === name && Object.hasOwn(scope.manifest, 'exports')
-                if (selfApplies && !interpretScopeRoute(session, scope, request, wanted, lane)) return false
+                if (selfApplies && !interpretScopeRoute(session, scope, request, wanted, lane, expected.independentLanes)) return false
               }
             }
           }

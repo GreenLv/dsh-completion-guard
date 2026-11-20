@@ -59,6 +59,16 @@ vi.mock('../../src/domain/rc022-rc3-byte-audit-manifest.js', async (original) =>
     'lib/index.js': createHash('sha256').update('audited fixture bytes\n').digest('hex'),
   } })) } }
 })
+vi.mock('../../src/domain/rc022-rc5-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<{ name: string; version: string }> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map(row => ({ ...row, modules: {
+    'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, main: 'lib/index.js',
+      ...(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'].includes(row.name) ? { dsh: { bundle: { patch: './cordis.patch.yml' } } } : {}),
+    })).digest('hex'),
+    'lib/index.js': createHash('sha256').update('audited fixture bytes\n').digest('hex'),
+  } })) } }
+})
 import { RC022_RC3_HOST_PACKAGES } from '../../src/domain/rc022-rc3-host.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'

@@ -24,11 +24,26 @@ function inventory(root, prefix = 'dist') {
       : [[`${prefix}/${row.name}`, sha(readFileSync(join(root, row.name)))]]))
 }
 const moduleHashes = inventory(directory)
-if (predecessor === '0.13.1') {
+const published = {
+  '0.13.1': {
+    sourceCommit: '38ea950380fffda88d9b48d5cdedd2c6ba6f0c61',
+    sha256: 'db1471029c06e535bf2da0e431ecd484f29c1e2e3509d134696bec8334b11075',
+    sdkRc: 'rc2',
+    candidateId: '132',
+  },
+  '0.13.2': {
+    sourceCommit: '9935379fd92b72ffe88845c1fcb9a831f4d303c2',
+    sha256: 'b908296b444d6a242baccc81daf6a920caa04b968cf56bf79a4e8e8c4a13b2c5',
+    sdkRc: 'rc3',
+    candidateId: '133',
+  },
+}
+const predecessorIdentity = Object.hasOwn(published, predecessor) ? published[predecessor] : undefined
+if (predecessorIdentity) {
   const tgz = args.get('--predecessor-tgz')
-  assert.ok(tgz, '0.13.1 requires the exact published predecessor tgz')
-  assert.equal(commit, '38ea950380fffda88d9b48d5cdedd2c6ba6f0c61')
-  assert.equal(sha(readFileSync(tgz)), 'db1471029c06e535bf2da0e431ecd484f29c1e2e3509d134696bec8334b11075')
+  assert.ok(tgz, `${predecessor} requires the exact published predecessor tgz`)
+  assert.equal(commit, predecessorIdentity.sourceCommit)
+  assert.equal(sha(readFileSync(tgz)), predecessorIdentity.sha256)
   const pkg = JSON.parse(execFileSync('tar', ['-xOf', tgz, 'package/package.json'], { encoding: 'utf8' }))
   assert.equal(pkg.version, predecessor); assert.equal(pkg.gitHead, commit)
   const names = execFileSync('tar', ['-tf', tgz], { encoding: 'utf8' }).trim().split('\n').filter(name => name.startsWith('package/dist/')).sort()
@@ -37,8 +52,9 @@ if (predecessor === '0.13.1') {
 } else assert.equal(predecessor, '0.13.0')
 const old = await import(pathToFileURL(join(directory, 'domain/index.js')).href)
 const sdk = createRequire(resolve(anchor))
-const sdkVersion = predecessor === '0.13.1' ? '0.2.2-rc.2' : '0.2.2-rc.1'
-const audited = JSON.parse(readFileSync(new URL(`../manifests/rc022-${predecessor === '0.13.1' ? 'rc2' : 'rc1'}-byte-audit.json`, import.meta.url), 'utf8'))
+const sdkRc = predecessorIdentity?.sdkRc ?? 'rc1'
+const sdkVersion = `0.2.2-rc.${sdkRc.slice(2)}`
+const audited = JSON.parse(readFileSync(new URL(`../manifests/rc022-${sdkRc}-byte-audit.json`, import.meta.url), 'utf8'))
 const sdkModules = {}
 for (const name of ['@deepseek-ai/dsh-session', '@deepseek-ai/dsh-session-persistence-jsonl', '@deepseek-ai/dsh-llm']) {
   const base = dirname(sdk.resolve(`${name}/package.json`))
@@ -54,7 +70,7 @@ const temporary = mkdtempSync(join(tmpdir(), 'guard-predecessor-recorder-'))
 const rows = []
 try {
   for (const profile of ['web', 'headless', 'desktop']) for (const mode of ['opt-in', 'always']) {
-    const header = { version: 4, id: `guard-v${predecessor === '0.13.1' ? '132' : '131'}-predecessor-${profile}-${mode}`, createdAt: 1, isSeeded: false, delegationDepth: 0 }
+    const header = { version: 4, id: `guard-v${predecessorIdentity?.candidateId ?? '131'}-predecessor-${profile}-${mode}`, createdAt: 1, isSeeded: false, delegationDepth: 0 }
     const identity = old.sessionBirthIdentity(header, 0)
     const source = mode === 'opt-in' ? 'legacy_adoption' : 'fresh_creation'
     const provenance = sha(`synthetic predecessor ${profile} ${mode}`)
@@ -84,7 +100,7 @@ try {
   }
   const fixture = { schema: 'dsh-predecessor-activation-fixture/v1', predecessorVersion: predecessor,
     sourceCommit: commit, writerEntry: 'dist/domain/index.js', moduleHashes, sdkModules,
-    ...(predecessor === '0.13.1' ? { predecessorTgzSha256: 'db1471029c06e535bf2da0e431ecd484f29c1e2e3509d134696bec8334b11075' } : {}),
+    ...(predecessorIdentity ? { predecessorTgzSha256: predecessorIdentity.sha256 } : {}),
     boundary: `Bindings emitted by Guard ${predecessor}; physical none/zstd logs emitted and reopened by the audited DSH ${sdkVersion} backend. Messages are synthetic upgrade inputs, not captured user history.`, rows }
   writeFileSync(output, JSON.stringify(fixture, null, 2) + '\n', { flag: 'wx' })
 } finally { rmSync(temporary, { recursive: true, force: true }) }

@@ -32,7 +32,7 @@ function archive(manifest: object): Buffer {
   header.fill(32, 148, 156); header.write([...header].reduce((a, b) => a + b, 0).toString(8).padStart(6, '0') + '\0 ', 148)
   return gzipSync(Buffer.concat([header, data, Buffer.alloc((512 - data.length % 512) % 512), Buffer.alloc(1024)]))
 }
-function fixture(mode: 'ok' | 'metadata' | 'archive' | 'missing' = 'ok') {
+function fixture(mode: 'ok' | 'metadata' | 'archive' | 'missing' | 'nested' | 'scope' = 'ok') {
   const root = mkdtempSync(join(tmpdir(), 'guard-desktop-rebind-')); roots.push(root)
   const version = '0.2.2-rc.3', aux = '@example/probe-helper'
   const manifests = [
@@ -43,7 +43,10 @@ function fixture(mode: 'ok' | 'metadata' | 'archive' | 'missing' = 'ok') {
   const runtime = { name: '@deepseek-ai/dsh-desktop-runtime', version, dependencies: { '@deepseek-ai/dsh': version, '@deepseek-ai/cordis': '4.1.0' } }
   const metadata = { platform: process.platform, arch: process.arch, release: { version, nodeVersion: '24.9.0', pnpmVersion: '11.28.5' }, files: [{ path: 'x', sha256: '0'.repeat(64) }] }
   const files: Record<string, Buffer> = { 'dsh/package.json': Buffer.from(JSON.stringify(runtime)), 'dsh/desktop-runtime.json': Buffer.from(JSON.stringify(metadata)), 'dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js': Buffer.from('') }
+  files['dsh/node_modules/@deepseek-ai/cordis/package.json'] = Buffer.from(JSON.stringify(manifests[1]))
   if (mode !== 'missing') files[`dsh/node_modules/${aux}/package.json`] = Buffer.from(JSON.stringify(manifests[2]))
+  if (mode === 'nested') files[`dsh/node_modules/@deepseek-ai/cordis/node_modules/${aux}/package.json`] = Buffer.from(JSON.stringify(manifests[2]))
+  if (mode === 'scope') files[`dsh/node_modules/@deepseek-ai/node_modules/${aux}/package.json`] = Buffer.from(JSON.stringify(manifests[2]))
   const app = join(root, 'app.asar'); writeFileSync(app, asar(files))
   const rows = manifests.map(m => { const bytes = archive(m); return { ...m, bytes, integrity: 'sha512-' + createHash('sha512').update(bytes).digest('base64') } })
   let auxMetadataCalls = 0
@@ -64,6 +67,6 @@ it('acquires the exact Desktop transitive identity and binds registry SRI', asyn
   const f = fixture(); const trust = await prepareDesktopHostTrust(f.app, f.root, f.fetcher)
   expect(trust.probeDependencies).toEqual(expect.arrayContaining([expect.objectContaining({ name: f.aux, version: '1.0.0', integrity: expect.stringMatching(/^sha512-/) })]))
 })
-it.each([['metadata', 'host_trust_registry_identity_mismatch'], ['archive', 'host_trust_archive_integrity_mismatch'], ['missing', 'host_contract_probe_dependency_unbound']] as const)('refuses %s in the Desktop production acquisition path', async (mode, code) => {
+it.each([['metadata', 'host_trust_registry_identity_mismatch'], ['archive', 'host_trust_archive_integrity_mismatch'], ['missing', 'host_contract_probe_dependency_unbound'], ['nested', 'host_contract_probe_dependency_unbound'], ['scope', 'host_contract_probe_dependency_unbound']] as const)('refuses %s in the Desktop production acquisition path', async (mode, code) => {
   const f = fixture(mode); await expect(prepareDesktopHostTrust(f.app, f.root, f.fetcher)).rejects.toMatchObject({ code })
 })

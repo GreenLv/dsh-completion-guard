@@ -20,7 +20,7 @@ import {
   type HostProfileKind,
 } from './host-lock.js'
 import { satisfiesSupportedHostRange } from './host-version.js'
-import { acquireHostTrust, hostTrustDigest, parseHostTrust, qualifyHostTrust, type HostRebindTrust, HostTrustError } from './host-trust.js'
+import { acquireHostTrust, hostTrustDigest, parseHostTrust, qualifyHostTrust, type HostRebindTrust, HostTrustError, HOST_TRUST_DURATION_MS, awaitSignal, readBoundedResponse, parseRegistryMetadata } from './host-trust.js'
 import type { PackageRow } from './digest.js'
 import { verifyDesktopCarrier } from './host-desktop-identity.js'
 import { desktopDependencyGraph, desktopHoistedProfileGraph } from './host-desktop-graph.js'
@@ -327,41 +327,66 @@ export async function prepareActiveHostTrust(runtime: string, profile: string,
   fetcher: typeof fetch = fetch): Promise<HostRebindTrust> {
   return acquireHostTrust(readActiveHostGraph(runtime, profile), fetcher, {
     profileRoot: profile,
-    dependencyIdentity: (name, importer) => probeDependencyIdentity(runtime, profile, name, importer),
+    dependencyIdentity: probeDependencyResolver(runtime, profile),
   })
 }
 
-function probeDependencyIdentity(runtime: string, profile: string, name: string, importer: string): PackageRow {
-  for (const owner of [runtime, profile]) {
-    const modules = join(owner, 'node_modules'), mapPath = join(modules, '.package-map.json')
-    if (!existsSync(mapPath)) continue
-    const { records, reachable } = activeGraphRecords(readFileSync(mapPath, 'utf8'))
-    const id = [...reachable].find((key) => key === importer || key.startsWith(importer + '@'))
-    if (!id || typeof records[id]?.url !== 'string') continue
-    const anchor = join(realpathSync(resolve(modules, records[id].url as string)), 'package.json')
-    const packageRoot = packageFromAnchor(anchor, name)
-    if (!packageRoot) continue
-    for (const graphRoot of [runtime, profile]) {
-      if (!existsSync(join(graphRoot, 'node_modules'))) continue
-      const graphModules = realpathSync(join(graphRoot, 'node_modules'))
-      const graph = activeGraphRecords(readFileSync(join(graphModules, '.package-map.json'), 'utf8'))
-      // The graph may legitimately hold several resolved versions of one
-      // dependency (rc.3 installs e.g. https-proxy-agent@7 and @9 side by
-      // side). The exact identity is the reachable record whose installed
-      // root equals the importer-resolved package root, not a graph-wide
-      // unique name.
-      const ids = [...graph.reachable].filter((key) => key === name || key.startsWith(name + '@'))
-      const match = ids.find((id) => typeof graph.records[id]?.url === 'string'
-        && realpathSync(resolve(graphModules, graph.records[id].url as string)) === packageRoot)
-      if (!match) continue
-      if (!within(graphModules, packageRoot)) continue
-      const manifest = readJsonObject(join(packageRoot, 'package.json'), 'host_contract_probe_dependency_unbound')
-      const matches = packageRowsFromPnpmLock(readFileSync(join(graphRoot, 'pnpm-lock.yaml'), 'utf8'), [name])
-        .filter((row) => row.version === manifest.version && row.integrity)
-      if (manifest.name === name && matches.length === 1) return matches[0]
+export function probeDependencyResolver(runtime: string, profile: string): (name: string, importer: string, signal: AbortSignal, identity: PackageRow) => PackageRow {
+  const session = createHostAuditSession()
+  return (name, importer, _signal, identity) => probeDependencyIdentity(runtime, profile, name, importer, identity, session)
+}
+
+function probeDependencyIdentity(runtime: string, profile: string, name: string, importer: string,
+  importerIdentity: PackageRow, session: HostAuditSession): PackageRow {
+  const graphs = [...new Set([runtime, profile])].flatMap(root => {
+    const modules = join(root, 'node_modules'), mapPath = join(modules, '.package-map.json')
+    if (!existsSync(mapPath)) return []
+    const graph = session.memo(`probe-graph:${mapPath}`, () => activeGraphRecords(session.readFile(mapPath).toString('utf8')))
+    return [{ root, modules: realpathSync(modules), graph }]
+  })
+  const lockRows = (root: string, packageName: string): PackageRow[] => {
+    const path = join(root, 'pnpm-lock.yaml')
+    return session.memo(`probe-lock:${path}\u0000${packageName}`, () => packageRowsFromPnpmLock(session.readFile(path).toString('utf8'), [packageName]))
+  }
+  const observed: PackageRow[] = [], seenImporters = new Set<string>()
+  for (const owner of graphs) {
+    const ids = [...owner.graph.reachable].filter(key => key === importer || key.startsWith(importer + '@'))
+    for (const id of ids) {
+      const url = owner.graph.records[id]?.url
+      if (typeof url !== 'string') continue
+      const importerRoot = realpathSync(resolve(owner.modules, url))
+      if (!within(owner.modules, importerRoot)) throw new HostProfileError('host_contract_probe_dependency_unbound', 'importer escapes its graph')
+      const manifest = readJsonObject(join(importerRoot, 'package.json'), 'host_contract_probe_dependency_unbound')
+      if (manifest.name !== importer || manifest.version !== importerIdentity.version) continue
+      const identityRows = lockRows(owner.root, importer).filter(row => row.version === manifest.version && row.integrity)
+      if (identityRows.length !== 1 || identityRows[0].integrity !== importerIdentity.integrity) {
+        throw new HostProfileError('host_contract_probe_dependency_unbound', 'importer identity is ambiguous')
+      }
+      if (seenImporters.has(importerRoot)) continue
+      seenImporters.add(importerRoot)
+      const packageRoot = packageFromAnchor(join(importerRoot, 'package.json'), name)
+      if (!packageRoot) throw new HostProfileError('host_contract_probe_dependency_unbound', 'importer dependency cannot be resolved')
+      const targetManifest = readJsonObject(join(packageRoot, 'package.json'), 'host_contract_probe_dependency_unbound')
+      let matched = false
+      for (const graph of graphs) {
+        if (!within(graph.modules, packageRoot)) continue
+        const targetIds = [...graph.graph.reachable].filter(key => key === name || key.startsWith(name + '@'))
+        const target = targetIds.find(key => {
+          const targetUrl = graph.graph.records[key]?.url
+          return typeof targetUrl === 'string' && realpathSync(resolve(graph.modules, targetUrl)) === packageRoot
+        })
+        if (!target) continue
+        const matches = lockRows(graph.root, name).filter(row => row.version === targetManifest.version && row.integrity)
+        if (targetManifest.name === name && matches.length === 1) { observed.push(matches[0]); matched = true }
+      }
+      if (!matched) throw new HostProfileError('host_contract_probe_dependency_unbound', 'probe dependency lacks an exact installed registry identity')
     }
   }
-  throw new HostProfileError('host_contract_probe_dependency_unbound', 'probe dependency lacks an exact installed registry identity')
+  const identity = observed[0]
+  if (!identity || observed.some(row => row.name !== identity.name || row.version !== identity.version || row.integrity !== identity.integrity)) {
+    throw new HostProfileError('host_contract_probe_dependency_unbound', 'importer routes resolve to conflicting identities')
+  }
+  return identity
 }
 
 /** Verify published executable bytes at the reachable runtime/profile roots.
@@ -419,7 +444,19 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
       // set once per audited package.
       const index = reachableIdsByName(graph, session)
       for (const expected of expectedPackages) {
-        const ids = index.get(expected.name) ?? []
+        let ids = index.get(expected.name) ?? []
+        // A probe dependency can coexist with unrelated installed versions.
+        // Select its exact authenticated version; the route auditor below
+        // still verifies each authenticated importer's actual selected path.
+        // Critical packages retain their stricter whole-graph uniqueness.
+        if (!CRITICAL_NAMES.includes(expected.name) && expected.version !== undefined && ids.length > 1) {
+          ids = ids.filter(id => {
+            const url = records[id]?.url
+            if (typeof url !== 'string' || !url.startsWith('./')) return false
+            const root = session.realpath(resolve(modules, url))
+            return root.startsWith(`${modules}${sep}`) && session.readJson(join(root, 'package.json')).version === expected.version
+          })
+        }
         if (ids.length > 1) return false
         if (!ids.length) continue
         const url = records[ids[0]]?.url
@@ -884,7 +921,7 @@ export function inspectTargetHostGraph(runtime: string, profile: string, trust?:
 }
 export async function prepareTargetHostTrust(runtime: string, profile: string, fetcher: typeof fetch = fetch): Promise<HostRebindTrust> {
   return acquireHostTrust(readTargetHostGraph(runtime, profile).packages, fetcher, {
-    profileRoot: profile, dependencyIdentity: (name, importer) => probeDependencyIdentity(runtime, profile, name, importer),
+    profileRoot: profile, dependencyIdentity: probeDependencyResolver(runtime, profile),
   })
 }
 
@@ -1165,22 +1202,36 @@ export function revalidateDesktopCoreLock(appAsarPath: string, profileRoot: stri
 export async function prepareDesktopHostTrust(appAsarPath: string, profileRoot: string,
   fetcher: typeof fetch = fetch): Promise<HostRebindTrust> {
   const runtime = readDesktopAppRuntime(appAsarPath)
+  const deadline = AbortSignal.timeout(HOST_TRUST_DURATION_MS)
+  const session = createHostAuditSession()
   const qualified: PackageRow[] = []
+  const integrityCache = new Map<string, Promise<string>>()
+  const integrityFor = (name: string, version: string): Promise<string> => {
+    const key = `${name}@${version}`
+    let value = integrityCache.get(key)
+    if (!value) {
+      value = desktopDependencyIntegrity(name, version, fetcher, deadline)
+      integrityCache.set(key, value)
+    }
+    return value
+  }
   for (const row of runtime.rows) {
     if (!row.version) throw new HostTrustError('host_trust_identity_invalid')
-    qualified.push({ name: row.name, version: row.version, integrity: await desktopDependencyIntegrity(row.name, row.version, fetcher) })
+    qualified.push({ name: row.name, version: row.version, integrity: await integrityFor(row.name, row.version) })
   }
   return acquireHostTrust(qualified, fetcher, {
-    profileRoot,
+    profileRoot, signal: deadline,
     // Every probe dependency the consumed adapters import resolves from the
     // same official app graph, by exact top-level manifest identity, and is
     // then completed with the trusted registry integrity for exactly that
     // name@version. The app graph supplies the IDENTITY; only the trusted
     // registry supplies the SRI — the graph never asserts integrity itself.
-    dependencyIdentity: async (name) => {
-      const identity = readDesktopDependency(appAsarPath, name)
+    dependencyIdentity: async (name, importer, _signal, importerIdentity) => {
+      const owner = readDesktopDependency(appAsarPath, importer, session)
+      if (owner.version !== importerIdentity.version) throw new HostTrustError('host_contract_probe_dependency_unbound', 'importer identity differs from the app graph')
+      const identity = readDesktopDependency(appAsarPath, name, session, importer)
       if (!identity.version) throw new HostTrustError('host_trust_identity_invalid')
-      return { ...identity, integrity: await desktopDependencyIntegrity(identity.name, identity.version, fetcher) }
+      return { ...identity, integrity: await integrityFor(identity.name, identity.version) }
     },
   })
 }
@@ -1190,11 +1241,20 @@ export async function prepareDesktopHostTrust(appAsarPath: string, profileRoot: 
  * fields before its dist.integrity is accepted; a missing or mismatching
  * identity fails closed instead of relaxing the integrity requirement. */
 async function desktopDependencyIntegrity(name: string, version: string,
-  fetcher: typeof fetch = fetch): Promise<string> {
-  const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
-    { signal: AbortSignal.timeout(30_000), redirect: 'error' })
-  if (!response.ok) throw new HostTrustError('host_trust_registry_unavailable')
-  const metadata = await response.json() as { name?: string; version?: string; dist?: { integrity?: string } }
+  fetcher: typeof fetch = fetch, deadline?: AbortSignal): Promise<string> {
+  const timeout = AbortSignal.timeout(30_000)
+  const signal = deadline ? AbortSignal.any([deadline, timeout]) : timeout
+  let response: Response
+  try {
+    response = await awaitSignal(fetcher(`https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
+      { signal, redirect: 'error' }), signal)
+  } catch (error) {
+    if (error instanceof HostTrustError) throw error
+    throw new HostTrustError('host_trust_registry_unavailable', `package ${name}@${version}: metadata request failed`)
+  }
+  const detail = `package ${name}@${version}: metadata request failed`
+  if (!response.ok) throw new HostTrustError('host_trust_registry_unavailable', detail)
+  const metadata = parseRegistryMetadata(await readBoundedResponse(response, 4 * 1024 * 1024, 'host_trust_registry_metadata_too_large', signal, detail), detail)
   const integrity = metadata.dist?.integrity
   if (metadata.name !== name || metadata.version !== version || typeof integrity !== 'string') {
     throw new HostTrustError('host_trust_registry_identity_mismatch')

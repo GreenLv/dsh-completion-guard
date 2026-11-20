@@ -19,7 +19,7 @@ describe('rc.5 cohort qualification', () => {
     // Since Guard 0.13.2 the ACTIVE cohort is the 0.2.2-rc.3 graph only; the
     // reviewed rc.5/rc.3 cohorts stay in the historical evidence set and no
     // longer admit (their exact graphs refuse at the version gate).
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.3-core-v1'])
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.5-core-v1', 'dsh-0.2.2-rc.3-core-v1'])
     expect(EXPECTED_HOST_PACKAGES).not.toEqual(RC021_RC5_HOST_PACKAGES)
     const manifest = JSON.parse(readFileSync('manifests/supported-host.v1.json', 'utf8'))
     expect(manifest.historicalCohorts.map((row: { id: string }) => row.id)).toContain('dsh-0.2.1-rc.5-core-v1')

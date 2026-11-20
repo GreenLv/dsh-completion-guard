@@ -21,7 +21,7 @@ Keep the host stopped through these steps. Substitute the actual absolute runtim
 以下步骤期间保持宿主停止，将目录替换为实际绝对路径。`inject` 会把锁写入 profile 的 `cordis.patch.yml`，执行前先备份。`inspect`、`inject` 和 `verify-dump` 三条宿主锁检查都须返回 `status: "supported"`；非零退出或其他状态都不能继续启动。该状态要求不适用于 `dsh plugin add`。
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.13.2
+dsh plugin --profile web add dsh-completion-guard@0.13.3
 
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
 DSH_PROFILE_ROOT=/absolute/path/to/.dsh/profiles/web
@@ -32,9 +32,9 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-The default reviewed baseline is DSH `0.2.2-rc.3` / Cordis `4.1.0`; older host cohorts — including the retired `0.2.2-rc.2` — are historical only. A later compatible host requires `--rebind-registry` on the three lock commands; it checks official archives and qualifies changed programs before rebuilding the lock. See [compatible-version rebinding](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions). Changes to DSH, Guard or the profile location require fresh checks. An ordinary market-only update does not require reinjection; installing or removing the Desktop market does.
+The default reviewed baseline is DSH `0.2.2-rc.5` / Cordis `4.1.0`; the reviewed `0.2.2-rc.3` cohort remains supported. The `0.2.2-rc.2` and older cohorts are historical. A later compatible host requires `--rebind-registry` on the three lock commands; it checks official archives and qualifies changed programs before rebuilding the lock. See [compatible-version rebinding](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions). Changes to DSH, Guard or the profile location require fresh checks. An ordinary market-only update does not require reinjection; installing or removing the Desktop market does.
 
-默认审查基线为 DSH `0.2.2-rc.3` / Cordis `4.1.0`；旧宿主队列（含已退役的 `0.2.2-rc.2`）仅保留历史含义。更新的兼容宿主需要在三条锁命令中添加 `--rebind-registry`，核对官方归档并验证变化的程序后重建锁，见[兼容版本重绑定](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。DSH、Guard 或 profile 路径变化后需要重新检查。仅 market 的普通更新不需重新注入，Desktop 市场的安装或移除则需要。
+默认审查基线为 DSH `0.2.2-rc.5` / Cordis `4.1.0`，已审查的 `0.2.2-rc.3` 队列仍受支持；`0.2.2-rc.2` 及更早队列仅保留历史含义。更新的兼容宿主需要在三条锁命令中添加 `--rebind-registry`，核对官方归档并验证变化的程序后重建锁，见[兼容版本重绑定](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。DSH、Guard 或 profile 路径变化后需要重新检查。仅 market 的普通更新不需重新注入，Desktop 市场的安装或移除则需要。
 
 ### Windows, Headless and Desktop / 其他入口
 

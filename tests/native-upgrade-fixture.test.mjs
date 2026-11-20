@@ -15,7 +15,7 @@ import { inject as nativeProbeInject } from '../scripts/native_host_probe_v070.m
 
 const dirs = []
 afterEach(() => { for (const p of dirs.splice(0)) rmSync(p, { recursive: true, force: true }) })
-it.each(['0.13.0', '0.13.1'])('binds both modes on every native profile to the executed %s writer and its exact module inventory', version => {
+it.each(['0.13.0', '0.13.1', '0.13.2'])('binds both modes on every native profile to the executed %s writer and its exact module inventory', version => {
   const fixture = predecessorActivationFixture(version)
   expect(new Set(fixture.rows.map(row => row.profile))).toEqual(new Set(['web', 'headless', 'desktop']))
   expect(fixture.moduleHashes['dist/domain/index.js']).toMatch(/^[a-f0-9]{64}$/)
@@ -25,7 +25,7 @@ it.each(['0.13.0', '0.13.1'])('binds both modes on every native profile to the e
   }
 })
 
-it.each([...['0.13.0', '0.13.1'].flatMap(version => ['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].map(compression => [version, profile, compression, false]))),
+it.each([...['0.13.0', '0.13.1', '0.13.2'].flatMap(version => ['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].map(compression => [version, profile, compression, false]))),
   ['0.13.1', 'web', 'none', true]])('checks %s predecessor bytes and live state on %s/%s restores (misreport=%s)', async (version, profile, compression, misreport) => {
   const root = mkdtempSync(join(tmpdir(), 'guard-native-upgrade-')); dirs.push(root)
   const require = createRequire(join(process.cwd(), 'package.json'))

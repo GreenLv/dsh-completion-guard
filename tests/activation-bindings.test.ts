@@ -160,8 +160,9 @@ describe('legacy migration inventory and receipt', () => {
       expect(prepareActivationMigration(inventory, input)).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
       expect(prepareActivationMigration(inventory, { ...input, cohorts: [prior.cohorts[0]] })).toMatchObject({ status: 'ready', receipt: { entries: [{ mode: 'opt-in' }, { mode: 'opt-in' }] } })
     }
-    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.2-rc.1' } })).toThrow('activation_prior_modes_invalid')
-    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.2' } })).toThrow('activation_prior_modes_invalid')
+    expect(prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.2-rc.1' } }).status).toBe('pending')
+    expect(prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.2' } }).status).toBe('pending')
+    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.3' } })).toThrow('activation_prior_modes_invalid')
     expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '1.0.0' } })).toThrow('activation_prior_modes_invalid')
   })
   it('uses read handles for exact inherited cut, emits no bodies and detects identity/revision changes', async () => {

@@ -15,7 +15,7 @@ import rc3Manifest from '../../src/domain/rc3-byte-audit-manifest.js'
 
 describe('rc.3 cohort qualification as historical evidence', () => {
   it('retires the rc.3 cohort to the historical evidence set', () => {
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.3-core-v1'])
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.5-core-v1', 'dsh-0.2.2-rc.3-core-v1'])
     const manifest = JSON.parse(readFileSync('manifests/supported-host.v1.json', 'utf8'))
     expect(manifest.historicalCohorts.map((row: { id: string }) => row.id)).toContain('dsh-0.2.1-rc.3-core-v1')
   })

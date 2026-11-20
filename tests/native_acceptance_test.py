@@ -738,8 +738,8 @@ class HostBoundEntrypointTests(unittest.TestCase):
             (Path(__file__).parents[1] / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))
         cohorts = manifest["cohorts"]
         # Guard 0.13.2 has one active rc.3 cohort; older rows remain historical.
-        self.assertEqual([cohort["id"] for cohort in cohorts], ["dsh-0.2.2-rc.3-core-v1"])
-        for cohort, version in zip(cohorts, ["0.2.2-rc.3"]):
+        self.assertEqual([cohort["id"] for cohort in cohorts], ["dsh-0.2.2-rc.5-core-v1", "dsh-0.2.2-rc.3-core-v1"])
+        for cohort, version in zip(cohorts, ["0.2.2-rc.5", "0.2.2-rc.3"]):
             targets = {"web": cohort["id"], "headless": cohort["id"]}
             chosen = self.host.select_target_cohorts(cohorts, version, targets)
             self.assertEqual(chosen["web"]["id"], cohort["id"])
@@ -747,7 +747,7 @@ class HostBoundEntrypointTests(unittest.TestCase):
         active = cohorts[0]
         launcher = [row for row in active["packages"] if row["name"] == "@deepseek-ai/dsh"]
         self.assertEqual(len(launcher), 1, "the launcher row must be unique for version lookup")
-        self.assertEqual(launcher[0]["version"], "0.2.2-rc.3")
+        self.assertEqual(launcher[0]["version"], "0.2.2-rc.5")
 
         targets = {"web": active["id"], "headless": active["id"]}
         chosen = self.host.select_target_cohorts(cohorts, launcher[0]["version"], targets)

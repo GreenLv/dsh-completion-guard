@@ -43,6 +43,14 @@ vi.mock('../../src/domain/rc022-rc3-byte-audit-manifest.js', async (original) =>
     'lib/index.js': createHash('sha256').update('export const synthetic = true\n').digest('hex'),
   } })) } }
 })
+vi.mock('../../src/domain/rc022-rc5-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map(p => ({ ...p, modules: {
+    'package.json': createHash('sha256').update(JSON.stringify({ name: p.name, version: p.version, exports: { '.': './lib/index.js' } })).digest('hex'),
+    'lib/index.js': createHash('sha256').update('export const synthetic = true\n').digest('hex'),
+  } })) } }
+})
 vi.mock('../../src/domain/rc5-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
@@ -72,6 +80,7 @@ import {
   verifyComposedHostLockDump,
 } from '../../src/domain/host-resolver.js'
 import { RC022_RC1_HOST_PACKAGES } from '../../src/domain/rc022-rc1-host.js'
+import { RC022_RC5_HOST_PACKAGES } from '../../src/domain/rc022-rc5-host.js'
 import { RC022_RC3_HOST_PACKAGES } from '../../src/domain/rc022-rc3-host.js'
 
 // This family isolates graph/config mutation with synthetic package manifests.
@@ -99,10 +108,10 @@ describe('v0.3 host graph and live capability binding', () => {
     // The retained 0.2.2-rc.2 identity stays bound through its own cohort
     // suite (v051-rc2-host.test.ts).
     expect(EXPECTED_HOST_PACKAGES).toContainEqual(
-      RC022_RC3_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal'),
+      RC022_RC5_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal'),
     )
     expect(EXPECTED_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal')?.version)
-      .toBe('0.2.2-rc.3')
+      .toBe('0.2.2-rc.5')
     // CG-DSH-001: a graph missing the whole Goal pair fails closed as an
     // incomplete audited graph; a partial Goal pair still names its own gap.
     const withoutGoalLock = evaluateHostLock(withoutGoal())
@@ -421,7 +430,7 @@ describe('active profile graph injection and composed readback', () => {
     expect(hostLockRowsFromComposedDump(managed)).toEqual(active.evaluation.packages)
     expect(hostLockContextFromComposedDump(managed)).toEqual({ platform: expectedPlatform, profileKind: 'web' })
     expect(verifyComposedHostLockDump(managed, active.evaluation).digest).toBe(active.evaluation.digest)
-    expect(() => verifyComposedHostLockDump(managed.replace('0.2.2-rc.3', '0.1.5-rc.2'), active.evaluation))
+    expect(() => verifyComposedHostLockDump(managed.replace('0.2.2-rc.5', '0.1.5-rc.2'), active.evaluation))
       .toThrowError(new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph'))
     expect(() => verifyComposedHostLockDump(managed.replace('hostLockProfile: "web"', 'hostLockProfile: "headless"'), active.evaluation))
       .toThrowError(/does not match the active graph/)

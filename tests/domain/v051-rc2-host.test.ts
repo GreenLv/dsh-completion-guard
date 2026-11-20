@@ -39,6 +39,6 @@ describe('current 0.2.2-rc.3 cohort with historical-host refusal', () => {
   it('rejects rewritten rc.3 identities and forged integrity', () => {
     for (const version of ['0.2.2-rc.2', '0.2.2-rc.0', '0.2.2-alpha.1', '0.2.1-rc.5', '0.2.1']) expect(evaluateHostLock(RC022_RC3_HOST_PACKAGES.map(r => r.version === '0.2.2-rc.3' ? {...r, version} : r)).status).toBe('unsupported')
     expect(evaluateHostLock(RC022_RC3_HOST_PACKAGES.map(r => ({...r, integrity: 'sha512-forged'}))).status).toBe('unsupported')
-    expect(HOST_COHORTS.map(c => c.id)).toEqual(['dsh-0.2.2-rc.3-core-v1'])
+    expect(HOST_COHORTS.map(c => c.id)).toEqual(['dsh-0.2.2-rc.5-core-v1', 'dsh-0.2.2-rc.3-core-v1'])
   })
 })

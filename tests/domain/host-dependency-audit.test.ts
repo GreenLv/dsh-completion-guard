@@ -42,6 +42,53 @@ function fixture(profile = false) {
 }
 
 describe('rc.2 mapped dependency edge family (native and profile interception)', () => {
+  it('checks the reviewed auxiliary export array in both lanes and refuses invalid fallbacks', () => {
+    const f = fixture()
+    const target = f.runtime.packages.get(dep)!
+    target.independentLanes = true
+    const conditions = { import: { types: './index.d.ts', default: './lib/index.js' },
+      require: { types: './index.d.ts', default: './lib/sub.js' }, default: './lib/sub.js' }
+    target.manifest.exports = { '.': [conditions, './lib/sub.js'], './': './' }
+    target.manifest.dependencies = { [dep]: '1.0.0' }
+    f.runtime.records[dep].dependencies = { [dep]: dep }
+    file(join(target.root, 'package.json'), JSON.stringify(target.manifest))
+    expect(createRequire(join(f.source, 'package.json')).resolve(dep)).toBe(join(target.root, 'lib/sub.js'))
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(true)
+    for (const changed of [
+      [conditions, './lib/index.js'],
+      [{ import: null, require: './lib/sub.js' }, './lib/sub.js'],
+      [conditions, '../escape.js'],
+      [conditions, './lib/sub.js', './lib/index.js'],
+    ]) {
+      target.manifest.exports = { '.': changed }
+      file(join(target.root, 'package.json'), JSON.stringify(target.manifest))
+      expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
+    }
+    target.manifest.exports = { '.': [conditions, './lib/sub.js'] }
+    target.independentLanes = false
+    file(join(target.root, 'package.json'), JSON.stringify(target.manifest))
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
+  })
+  it('allows an unrelated importer to use another auxiliary version while guarding the authenticated route', () => {
+    const f = fixture()
+    f.runtime.packages.get(dep)!.independentLanes = true
+    const other = '@unrelated/tool'
+    const otherRoot = pkg(f.runtime, other, [dep], '.pnpm/other/node_modules/' + other)
+    f.runtime.packages.delete(other)
+    const alternate = join(f.runtime.modules, '.pnpm/alternate/node_modules', dep)
+    file(join(alternate, 'package.json'), JSON.stringify({ name: dep, version: '2.0.0', main: './index.js' }))
+    file(join(alternate, 'index.js'), 'export const other = true')
+    f.runtime.records['alternate'] = { url: './.pnpm/alternate/node_modules/' + dep, dependencies: {} }
+    f.runtime.reachable.add('alternate')
+    f.runtime.records[other].dependencies = { [dep]: 'alternate' }
+    const otherLink = join(otherRoot, 'node_modules', dep)
+    mkdirSync(dirname(otherLink), { recursive: true }); symlinkSync(alternate, otherLink, 'junction')
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(true)
+
+    const authenticatedLink = join(f.source, 'lib/node_modules', dep)
+    mkdirSync(dirname(authenticatedLink), { recursive: true }); symlinkSync(alternate, authenticatedLink, 'junction')
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
+  })
   it.each([false, true])('accepts mapped pnpm identity / profile installation route (%s)', profile => {
     const f = fixture(profile)
     expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(true)

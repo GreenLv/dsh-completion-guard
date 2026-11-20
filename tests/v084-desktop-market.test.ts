@@ -19,6 +19,19 @@ vi.mock('../src/domain/rc022-rc3-byte-audit-manifest.js', async (original) => {
   }))
   return { default: { ...source.default, packages } }
 })
+vi.mock('../src/domain/rc022-rc5-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
+  const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
+  const packages = source.default.packages.map((row) => ({
+    ...row,
+    modules: {
+      'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, type: 'module', main: 'lib/index.js' }) + '\n', 'utf8').digest('hex'),
+      'lib/index.js': libDigest,
+    },
+  }))
+  return { default: { ...source.default, packages } }
+})
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'

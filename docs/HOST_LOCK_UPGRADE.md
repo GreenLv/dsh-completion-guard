@@ -1,6 +1,6 @@
 # Upgrading the core host lock
 
-Version 0.13.2 requires DSH `>=0.2.2-rc.3` and qualified Cordis `>=4.1.0`. The `0.2.2-rc.2` host is below this floor: upgrade DSH first, then install this Guard version. Fresh installations have no old-mode inventory to adopt; existing installations must preserve their old mode sources before any replacement. Follow this order:
+Version 0.13.3 requires DSH `>=0.2.2-rc.3` and qualified Cordis `>=4.1.0`. The `0.2.2-rc.2` host is below this floor: upgrade DSH first, then install this Guard version. Fresh installations have no old-mode inventory to adopt; existing installations must preserve their old mode sources before any replacement. Follow this order:
 
 Prepare the new tool without changing a profile: download the versioned npm tgz below into a new temporary directory and unpack it. The entry is inside the extracted `package/` directory. `inspect-patch` needs Node.js 24.9.0 or later, but no dependency installation or running DSH host. The example uses a POSIX shell; replace the profile placeholder with an existing profile's absolute path. On Windows, download the same tgz, extract it with the system `tar -xf`, then run the same `.mjs` through `node` using Windows absolute paths and your shell's variable syntax.
 
@@ -9,7 +9,7 @@ Prepare the new tool without changing a profile: download the versioned npm tgz 
 ```sh
 GUARD_PREP_DIR="$(mktemp -d)"
 curl --fail --location --output "$GUARD_PREP_DIR/guard.tgz" \
-  https://registry.npmjs.org/dsh-completion-guard/-/dsh-completion-guard-0.13.2.tgz
+  https://registry.npmjs.org/dsh-completion-guard/-/dsh-completion-guard-0.13.3.tgz
 tar -xzf "$GUARD_PREP_DIR/guard.tgz" -C "$GUARD_PREP_DIR"
 node "$GUARD_PREP_DIR/package/bin/dsh-completion-guard-host-lock.mjs" \
   inspect-patch --profile-root /absolute/existing-profile
@@ -24,7 +24,7 @@ node "$GUARD_PREP_DIR/package/bin/dsh-completion-guard-host-lock.mjs" \
 
 停宿主或更改依赖前，先用独立准备的候选工具对每个已有的目标 profile 执行 `node /absolute/prepared-package/bin/dsh-completion-guard-host-lock.mjs inspect-patch --profile-root /absolute/profile`。须退出 0 且返回 `status: "supported"`、`inspection_scope: "profile_patch_boundary"`；`managed` 和 `unmanaged_entries` 描述现有块。非零退出须先诊断。此检查只读，不证明宿主、依赖或插件加载资格。
 
-0.13.2 要求 DSH `>=0.2.2-rc.3`：`0.2.2-rc.2` 宿主已低于下限，先升级 DSH 再装 Guard。全新安装没有旧模式需要采纳；已有安装必须在替换前保留旧来源。顺序为：先停相关写者，保存旧安装包和脱敏有效模式来源，以独立准备的候选工具冻结公开库存及旧收据；再按需升级低于下限的 DSH、安装 Guard、重建宿主锁；保持写者停止，保留已有有效模式绑定，仅在需要迁移时于宿主启动前完成旧收据 `adopt` 和 `verify`；最后按需启动。全新安装跳过旧模式准备与 adoption，未知旧来源仍保持 pending，宿主锁不替代模式核验。
+0.13.3 要求 DSH `>=0.2.2-rc.3`：`0.2.2-rc.2` 宿主已低于下限，先升级 DSH 再装 Guard。全新安装没有旧模式需要采纳；已有安装必须在替换前保留旧来源。顺序为：先停相关写者，保存旧安装包和脱敏有效模式来源，以独立准备的候选工具冻结公开库存及旧收据；再按需升级低于下限的 DSH、安装 Guard、重建宿主锁；保持写者停止，保留已有有效模式绑定，仅在需要迁移时于宿主启动前完成旧收据 `adopt` 和 `verify`；最后按需启动。全新安装跳过旧模式准备与 adoption，未知旧来源仍保持 pending，宿主锁不替代模式核验。
 
 Failure readbacks distinguish these cases:
 
@@ -108,7 +108,7 @@ certificate authority — completion certificates, mutation authorization,
 release pre-effect decisions and Goal/Stop boundaries — validates the lock
 freshly at the moment of its own decision.
 
-Version 0.13.2 uses `dsh-0.2.2-rc.3-core-v1` as the default audited baseline; it derives graph cohorts for other compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
+Version 0.13.3 uses `dsh-0.2.2-rc.5-core-v1` as the default audited baseline and retains the rc.3 cohort; it derives graph cohorts for other compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
 
 The manifest's `registry-derived-pending-native-audit` provenance and empty `auditedPlatforms` list describe its immutable source audit, which is part of the lock digest. Native acceptance belongs to each exact artifact's separate Release annexes; it does not rewrite that digest. Inspection, injection and dump verification report `audit_provenance` alongside the cohort and digest.
 
@@ -134,7 +134,7 @@ The shared digest-v3 encoder and its upstream fixtures are unchanged.
 
 Stop the Desktop app before installing or rebuilding its lock. Use the CLI carrier shipped with that app: `Contents/Resources/runtime/cli/bin/dsh` on macOS, or `resources\runtime\cli\bin\dsh.cmd` in the Windows installation. A separately installed `dsh` CLI cannot manage the reserved Desktop profile.
 
-For an existing installation, first preserve the old package/effective modes and freeze the inventory/receipt before replacing the carrier or Guard; after replacement, complete adoption/verification before Desktop startup. For a fresh installation there is no old-mode adoption. Install Guard through that carrier with `plugin --profile desktop add dsh-completion-guard@0.13.2`. Use the profile's own host-lock tool and the app's physical `app.asar` as `--runtime-root`. The default profile is `$DSH_HOME/profiles/desktop`, or `.dsh/profiles/desktop` under the user's home when `DSH_HOME` is unset. This POSIX example starts after installation:
+For an existing installation, first preserve the old package/effective modes and freeze the inventory/receipt before replacing the carrier or Guard; after replacement, complete adoption/verification before Desktop startup. For a fresh installation there is no old-mode adoption. Install Guard through that carrier with `plugin --profile desktop add dsh-completion-guard@0.13.3`. Use the profile's own host-lock tool and the app's physical `app.asar` as `--runtime-root`. The default profile is `$DSH_HOME/profiles/desktop`, or `.dsh/profiles/desktop` under the user's home when `DSH_HOME` is unset. This POSIX example starts after installation:
 
 ```sh
 DSH_DESKTOP_ASAR=/absolute/path/to/DeepSeek-Harness.app/Contents/Resources/app.asar

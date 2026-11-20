@@ -2,6 +2,12 @@
 
 Start with the requirements for your Guard version. The host lock then checks the packages and code the profile actually loads. A version number can meet the minimum while the installation still fails these checks. Follow the [setup guide](GETTING_STARTED.md) for the current install steps.
 
+## 0.13.3: DSH >=0.2.2-rc.3
+
+The default reviewed registry graph is `dsh-0.2.2-rc.5-core-v1`, with 51 packages and Cordis 4.1.0. The separately reviewed rc.3 graph remains active. Other hosts at or above the floor require qualification of the actual package identities, installed bytes, dependency routes and consumed behavior. The macOS arm64 and Windows x64 rc.5 Desktop carrier identities are registered independently. The [acceptance record](LOCAL_ACCEPTANCE.md) tracks platform and artifact checks.
+
+默认审查图为 `dsh-0.2.2-rc.5-core-v1`，包含 51 个包和 Cordis 4.1.0。已独立审查的 rc.3 包图仍受支持。其他达到最低版本的宿主须核验实际包身份、安装字节、依赖路径和所消费的行为。macOS arm64 与 Windows x64 rc.5 Desktop 载体身份分别登记，平台和制品检查见[验收记录](LOCAL_ACCEPTANCE.md)。
+
 ## 0.13.2: DSH >=0.2.2-rc.3
 
 Upgrade DSH to `0.2.2-rc.3` or later before installing Guard 0.13.2. Node.js must be `>=24.9.0` and Cordis `>=4.1.0`. All package declarations and runtime admission use the same DSH floor, without an upper version bound. The `0.2.2-rc.2` host is now below the floor together with every earlier host: rc.2 is the documented upgrade source, and old session data keeps its migration path, but no old host reopens admission. Later versions still require package, byte, dependency-route and behavioral qualification.

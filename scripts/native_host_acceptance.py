@@ -40,7 +40,7 @@ PROBE_V070_CASES = {
     "v070_goal_adoption_current_closure", "v070_explicit_release_minimum",
     "v070_history_compaction_restart", "v090_activation_birth_restore_adoption",
     "v070_archive043_git_chain", "v070_archive044_pending_followup",
-    "v131_predecessor_activation_restore",
+    "v131_predecessor_activation_restore", "v132_predecessor_activation_restore",
 }
 ACTIVATION_ASSERTIONS = frozenset({
     'birth_source', 'birth_t0', 'birth_bound', 'birth_mode',
@@ -55,6 +55,7 @@ PROBE_V070_DRIVER_FILES = (
     "native_incident_fixture_v070.mjs", "native_upgrade_fixture_v131.mjs",
     "../tests/fixtures/upgrade/legacy-0.13.0-activation.json",
     "../tests/fixtures/upgrade/legacy-0.13.1-activation.json",
+    "../tests/fixtures/upgrade/legacy-0.13.2-activation.json",
 )
 
 

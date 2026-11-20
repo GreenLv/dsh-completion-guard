@@ -9,19 +9,21 @@ import { RC021_RC5_HOST_PACKAGES } from '../src/domain/rc021-rc5-host.js'
 import { RC022_RC1_HOST_PACKAGES } from '../src/domain/rc022-rc1-host.js'
 import { RC022_RC2_HOST_PACKAGES } from '../src/domain/rc022-rc2-host.js'
 import { RC022_RC3_HOST_PACKAGES } from '../src/domain/rc022-rc3-host.js'
+import { RC022_RC5_HOST_PACKAGES } from '../src/domain/rc022-rc5-host.js'
 
-describe('0.13.2 >=0.2.2-rc.3 floor and default production contract', () => {
-  it('keeps rc.3 as the sole active cohort, retires rc.2/rc.1/rc.5/rc.3 to historical evidence, and raises the floor', () => {
+describe('0.13.3 >=0.2.2-rc.3 floor and default production contract', () => {
+  it('admits rc.5 and rc.3 as reviewed cohorts while retaining the floor', () => {
     const manifest = JSON.parse(readFileSync('manifests/supported-host.v1.json', 'utf8'))
     // The shipped supported-host rows record the 0.13.2 rc.3 baseline: the
     // rc.3 cohort is active, the retired 0.2.2-rc.2 upgrade source leads the
     // historical evidence list, and every entry keeps its exact audited
     // identities.
-    expect(manifest.cohorts.map((row: { id: string }) => row.id)).toEqual(['dsh-0.2.2-rc.3-core-v1'])
+    expect(manifest.cohorts.map((row: { id: string }) => row.id)).toEqual(['dsh-0.2.2-rc.5-core-v1', 'dsh-0.2.2-rc.3-core-v1'])
     expect(manifest.historicalCohorts.map((row: { id: string }) => row.id)).toEqual([
       'dsh-0.2.2-rc.2-core-v1', 'dsh-0.2.2-rc.1-core-v1', 'dsh-0.2.1-rc.5-core-v1', 'dsh-0.2.1-rc.3-core-v1', 'dsh-0.2.1-rc.2-core-v1',
     ])
-    expect(manifest.cohorts[0].packages).toEqual(RC022_RC3_HOST_PACKAGES)
+    expect(manifest.cohorts[0].packages).toEqual(RC022_RC5_HOST_PACKAGES)
+    expect(manifest.cohorts[1].packages).toEqual(RC022_RC3_HOST_PACKAGES)
     // The retired 0.2.2-rc.2 row keeps its recorded historical identity
     // verbatim: it is the retained upgrade source and refusal control, never
     // an admission channel after the 0.13.2 floor raise.
@@ -30,9 +32,9 @@ describe('0.13.2 >=0.2.2-rc.3 floor and default production contract', () => {
     expect(manifest.historicalCohorts[2].packages).toEqual(RC021_RC5_HOST_PACKAGES)
     expect(manifest.historicalCohorts[3].packages).toEqual(RC021_RC3_HOST_PACKAGES)
     expect(manifest.historicalCohorts[4].packages).toEqual(RC021_RC2_HOST_PACKAGES)
-    expect(ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.2-rc.3')
-    expect(EXPECTED_HOST_PACKAGES).toEqual(RC022_RC3_HOST_PACKAGES)
-    expect(auditedManifestFor(undefined).hostVersion).toBe('0.2.2-rc.3')
+    expect(ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.2-rc.5')
+    expect(EXPECTED_HOST_PACKAGES).toEqual(RC022_RC5_HOST_PACKAGES)
+    expect(auditedManifestFor(undefined).hostVersion).toBe('0.2.2-rc.5')
     expect(auditedManifestFor('0.2.2-rc.3').hostVersion).toBe('0.2.2-rc.3')
     expect(auditedManifestFor('0.2.2-rc.2').hostVersion).toBe('0.2.2-rc.2')
     // The rc.1 audited manifest keeps its historical evidence identity; it is

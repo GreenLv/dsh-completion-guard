@@ -546,9 +546,35 @@ export const DESKTOP_IDENTITY_FACTS: Readonly<{
  * installed-byte audit separately refuses nested critical duplicates, so a
  * nested-only dependency can never be silently resolved here).
  */
-export function readDesktopDependency(appAsarPath: string, name: string, session?: HostAuditSession): PackageRow {
+export function readDesktopDependency(appAsarPath: string, name: string, session?: HostAuditSession, importer?: string): PackageRow {
   const realArchive = realpathSync(appAsarPath)
   const index = memoizedAsarIndex(session, realArchive)
+  if (importer) {
+    const verifyRoute = (): void => {
+      const owner = asarNode(index, `${DESKTOP_GRAPH_ROOT}/${importer}`.split('/'))
+      if (!owner?.files) throw new HostProfileError('host_contract_probe_dependency_unbound', 'importer is absent from the app graph')
+      const hasShadow = (node: AsarNode, depth: number): boolean => {
+        if (depth > 64) throw new HostProfileError('host_contract_probe_dependency_unbound', 'importer graph is too deep')
+        for (const [part, child] of Object.entries(node.files ?? {})) {
+          if (part === 'node_modules') {
+            let target: AsarNode | undefined = child
+            for (const segment of name.split('/')) target = target?.files?.[segment]
+            if (target) return true
+          } else if (child.files && hasShadow(child, depth + 1)) return true
+        }
+        return false
+      }
+      if (hasShadow(owner, 0)) throw new HostProfileError('host_contract_probe_dependency_unbound', 'importer has a nested dependency shadow')
+      if (importer.startsWith('@')) {
+        const scope = importer.split('/')[0]
+        if (asarNode(index, `${DESKTOP_GRAPH_ROOT}/${scope}/node_modules/${name}`.split('/'))) {
+          throw new HostProfileError('host_contract_probe_dependency_unbound', 'importer scope has a dependency shadow')
+        }
+      }
+    }
+    if (session) session.memo(`desktop-probe-route:${realArchive}\u0000${importer}\u0000${name}`, verifyRoute)
+    else verifyRoute()
+  }
   const manifestPath = `${DESKTOP_GRAPH_ROOT}/${name}/package.json`
   if (!asarNode(index, manifestPath.split('/'))) {
     throw new HostProfileError('host_contract_probe_dependency_unbound', `dependency ${name} has no top-level manifest in the app graph`)

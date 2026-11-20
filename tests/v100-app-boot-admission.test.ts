@@ -27,7 +27,9 @@ function loadAppBoot(): { evaluatePluginCompatibility: (manifest: unknown, exemp
   const rc022rc1Audit = JSON.parse(readFileSync(new URL('../manifests/rc022-rc1-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
   const rc022rc2Audit = JSON.parse(readFileSync(new URL('../manifests/rc022-rc2-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
   const rc022rc3Audit = JSON.parse(readFileSync(new URL('../manifests/rc022-rc3-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
-  const audit = actual.version === '0.2.2-rc.3' ? rc022rc3Audit
+  const rc022rc5Audit = JSON.parse(readFileSync(new URL('../manifests/rc022-rc5-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
+  const audit = actual.version === '0.2.2-rc.5' ? rc022rc5Audit
+    : actual.version === '0.2.2-rc.3' ? rc022rc3Audit
     : actual.version === '0.2.2-rc.2' ? rc022rc2Audit
     : actual.version === '0.2.2-rc.1' ? rc022rc1Audit
     : actual.version === '0.2.1-rc.5' ? rc5Audit : actual.version === '0.2.1-rc.3' ? rc3Audit : rc2Audit

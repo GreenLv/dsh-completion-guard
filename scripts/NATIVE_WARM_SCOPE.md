@@ -2,6 +2,8 @@
 
 This supplement checks whether an installed Guard refuses a protected mock publish when a nearer package scope changes the current dependency route. It exercises Web and Headless separately in real DSH host processes without a model request. The runner accepts an already frozen Guard tgz; it does not pack or publish Guard.
 
+The current driver is bound to the reviewed DSH `0.2.2-rc.5` cohort on both profiles. Its preflight rejects other selections before starting a host. Earlier warm-run records retain their original driver and subject.
+
 The source checkout must be clean and match the full source commit embedded in the tgz. Supply the tgz's SHA-256, a physical official DSH runtime root, and the driver digest. The runner plans a new fixture within explicit file, byte, directory, link, and resolution budgets. It copies each physical file once and remaps internal links to their physical targets inside the fixture. It rejects unsafe or dangling links, cycles, changed bytes, and unavailable link capabilities before proceeding. The v2 copy inventory binds directories, file bytes, and remapped link topology; it does not establish runtime graph equivalence. Each profile's actual graph and host lock are checked after installation.
 
 From the repository root, obtain the driver digest with:

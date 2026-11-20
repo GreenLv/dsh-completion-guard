@@ -73,7 +73,7 @@ describe('shipped artifact entries', () => {
     const rows = domain.RC021_RC5_HOST_PACKAGES as Array<{ name: string; version?: string; integrity?: string }>
     expect(rows).toHaveLength(47)
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
-    expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.2-rc.3')
+    expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.2-rc.5')
     expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.3')
     // The floor-based admission model: the public range is >=, and the
     // validated-versions list is evidence, not an admission whitelist.
@@ -96,7 +96,7 @@ describe('shipped artifact entries', () => {
     const evaluation = domain.evaluateHostLock(domain.EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(evaluation).toMatchObject({
       status: 'supported',
-      cohortId: 'dsh-0.2.2-rc.3-core-v1',
+      cohortId: 'dsh-0.2.2-rc.5-core-v1',
       auditProvenance: 'registry-derived-pending-native-audit',
     })
     // The rc.5/rc.3/rc.2 graphs are historical evidence below the raised
@@ -132,7 +132,7 @@ describe('shipped artifact entries', () => {
   })
 
   it('advertises only entry points that exist in the built tree', () => {
-    expect(manifest.version).toBe('0.13.2')
+    expect(manifest.version).toBe('0.13.3')
     expect(manifest.main).toBe('dist/index.js')
     for (const [subpath, target] of Object.entries(manifest.exports)) {
       for (const field of ['types', 'default'] as const) {

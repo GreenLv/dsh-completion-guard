@@ -170,7 +170,7 @@ it('accepts byte-identical reviewed backend with a newer version and rejects cha
   // accepted. A relabel to 0.2.2-rc.2 is now below the raised 0.13.2 floor,
   // and a relabel to 0.2.2-rc.1 also mismatches the rc.1 row's own
   // lib/worker.cjs bytes — both refuse closed.
-  for (const [index, version] of ['0.2.2-rc.3', '9.0.0'].entries()) {
+  for (const [index, version] of ['0.2.2-rc.5', '9.0.0'].entries()) {
     manifest.version = version; writeFileSync(manifestPath, JSON.stringify(manifest))
     const accepted = run(`accepted-${index}`); expect(accepted.status, accepted.stderr).toBe(0)
     expect(JSON.parse(accepted.stdout)).toMatchObject({ status: 'inventory_scanned', totalCount: 2 })
@@ -185,7 +185,7 @@ it('accepts byte-identical reviewed backend with a newer version and rejects cha
     manifest.version = version; writeFileSync(manifestPath, JSON.stringify(manifest))
     expect(run(`below-floor-${index}`).stderr).toContain('activation_backend_unreviewed')
   }
-  manifest.version = '0.2.2-rc.3'; writeFileSync(manifestPath, JSON.stringify(manifest))
+  manifest.version = '0.2.2-rc.5'; writeFileSync(manifestPath, JSON.stringify(manifest))
   const receipt = output(root, 'serializer-receipt'), home = join(root, 'serializer-home')
   const invoke = (op: string, args: string[]) => spawnSync(process.execPath, [entry, op, '--runtime-anchor', join(runtime, 'package.json'), '--persistence-root', storage, ...args], { encoding: 'utf8', timeout: CHILD_TIMEOUT_MS, killSignal: 'SIGTERM' })
   const inspected = invoke('inspect', ['--prior-modes', f.prior, '--output', receipt]); expect(inspected.status, inspected.stderr).toBe(0)
@@ -196,7 +196,7 @@ it('accepts byte-identical reviewed backend with a newer version and rejects cha
   // asserted above.)
   const changedSerializer = invoke('adopt', ['--receipt', receipt, '--dsh-home', home])
   expect(changedSerializer.stderr).toContain('activation_inventory_changed'); expect(existsSync(home)).toBe(false)
-  manifest.version = '0.2.2-rc.3'; writeFileSync(manifestPath, JSON.stringify(manifest))
+  manifest.version = '0.2.2-rc.5'; writeFileSync(manifestPath, JSON.stringify(manifest))
   for (const file of ['lib/index.js', 'lib/worker.cjs']) {
     const path = join(backend, file), before = readFileSync(path); writeFileSync(path, Buffer.concat([before, Buffer.from('\n// changed\n')]))
     const rejected = run(file.includes('worker') ? 'worker' : 'entry')

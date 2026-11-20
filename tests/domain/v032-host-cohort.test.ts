@@ -171,7 +171,7 @@ describe('audited host cohort registry', () => {
     expect(belowFloor.status).toBe('unsupported')
     expect(belowFloor.reasonCode).toBe('host_lock_version_mismatch')
     const current = evaluateHostLock(RC022_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
-    expect(current).toMatchObject({ status: 'supported', cohortId: ACTIVE_COHORT_ID })
+    expect(current).toMatchObject({ status: 'supported', cohortId: 'dsh-0.2.2-rc.3-core-v1' })
     expect(current.capabilities.web_control.status).toBe('supported')
     // Bare evaluation reports the cohort-selection failure for the retired
     // graph; the configured entry applies the version gate (below_minimum),
@@ -231,10 +231,10 @@ describe('audited host cohort registry', () => {
     for (const platform of ['posix', 'windows'] as const) {
       expect(selectHostCohort(RC022_RC3_HOST_PACKAGES, platform)).toMatchObject({
         consistent: true,
-        cohort: { id: ACTIVE_COHORT_ID },
+        cohort: { id: 'dsh-0.2.2-rc.3-core-v1' },
       })
       const evaluation = evaluateHostLock(RC022_RC3_HOST_PACKAGES, { platform, profileKind: 'web' })
-      expect(evaluation).toMatchObject({ status: 'supported', cohortId: ACTIVE_COHORT_ID })
+      expect(evaluation).toMatchObject({ status: 'supported', cohortId: 'dsh-0.2.2-rc.3-core-v1' })
       expect(evaluation.auditProvenance).toBe('registry-derived-pending-native-audit')
     }
   })
@@ -329,7 +329,7 @@ describe('audited host cohort registry', () => {
     // Development dependencies run on an admitted host version at or above
     // the current 0.2.2-rc.3 floor.
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tools']) {
-      expect(manifest.devDependencies[name]).toBe('0.2.2-rc.3')
+      expect(manifest.devDependencies[name]).toBe('0.2.2-rc.5')
       expect(satisfiesSupportedHostRange(manifest.devDependencies[name]!)).toBe(true)
     }
   })
@@ -359,7 +359,7 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
   it('locks the 0.2.2-rc.3 core as the supported web_control target on both platforms', () => {
     for (const platform of ['posix', 'windows'] as const) {
       const evaluation = evaluateHostLock(RC022_RC3_HOST_PACKAGES, { platform, profileKind: 'web' })
-      expect(evaluation).toMatchObject({ status: 'supported', cohortId: ACTIVE_COHORT_ID })
+      expect(evaluation).toMatchObject({ status: 'supported', cohortId: 'dsh-0.2.2-rc.3-core-v1' })
       expect(evaluation.capabilities.web_control.status).toBe('supported')
       expect(evaluateHostCapability(evaluation, { action: 'apply', platform, profileKind: 'web' }).status).toBe('supported')
     }
@@ -412,7 +412,7 @@ describe('core lock policy identity', () => {
     // Guard 0.13.2: the active set is the 0.2.2-rc.3 core only; the rc.5,
     // 0.2.1-rc.3 and retired 0.2.2-rc.2 rows stay historical evidence below
     // the raised floor.
-    expect(CORE_HOST_COHORTS).toHaveLength(1)
+    expect(CORE_HOST_COHORTS).toHaveLength(2)
     expect(CORE_HOST_COHORTS[0].id).toBe(ACTIVE_COHORT_ID)
     for (const core of CORE_HOST_COHORTS) {
       expect(core.manifestVersion).toBe(2)

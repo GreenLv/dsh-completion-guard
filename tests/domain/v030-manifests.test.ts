@@ -25,6 +25,7 @@ describe('v0.3 versioned manifests', () => {
     expect(rows.map((row) => row.name)).toEqual([
       '@deepseek-ai/cordis',
       '@deepseek-ai/dsh-agent',
+      '@deepseek-ai/dsh-agent-loop',
       '@deepseek-ai/dsh-app-boot',
       '@deepseek-ai/dsh-attachment',
       '@deepseek-ai/dsh-commands',
@@ -98,9 +99,9 @@ describe('v0.3 versioned manifests', () => {
       expect(entry.auditProvenance).toBe(cohort.auditProvenance)
       expect(entry.packages).toEqual(cohort.packages)
     }
-    expect(HOST_COHORTS).toHaveLength(1)
+    expect(HOST_COHORTS).toHaveLength(2)
     expect(HOST_COHORTS[0].capabilities).toContainEqual({
-      name: 'host_cohort', value: { k: 's', v: 'dsh-0.2.2-rc.3-core-v1' },
+      name: 'host_cohort', value: { k: 's', v: 'dsh-0.2.2-rc.5-core-v1' },
     })
     expect(HOST_COHORTS[0].capabilities).toContainEqual({
       name: 'external_wait_jobs_readback', value: { k: 's', v: 'dsh.jobs.v1' },
@@ -166,7 +167,7 @@ describe('v0.3 versioned manifests', () => {
     const withGoal = evaluateHostLock(EXPECTED_HOST_PACKAGES)
     expect(withGoal.status).toBe('supported')
     expect(withGoal.goalAvailable).toBe(true)
-    expect(withGoal.cohortId).toBe('dsh-0.2.2-rc.3-core-v1')
+    expect(withGoal.cohortId).toBe('dsh-0.2.2-rc.5-core-v1')
     // CG-DSH-001: the audited cohort is one indivisible whole-graph contract;
     // a graph missing audited rows (Goal rows included) fails closed.
     const withoutGoal = evaluateHostLock(EXPECTED_HOST_PACKAGES.filter((row) => !['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(row.name)))
@@ -174,7 +175,8 @@ describe('v0.3 versioned manifests', () => {
     expect(withoutGoal.reasonCode).toBe('host_lock_missing')
     expect(withoutGoal.missingPackages).toEqual(['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'])
     expect(withoutGoal.digest).not.toBe(withGoal.digest)
-    expect(HOST_COHORTS[0].supportedGoalVersions).toEqual(['0.2.2-rc.3'])
+    expect(HOST_COHORTS[0].supportedGoalVersions).toEqual(['0.2.2-rc.5'])
+    expect(HOST_COHORTS[1].supportedGoalVersions).toEqual(['0.2.2-rc.3'])
   })
 
   it('fails closed for unknown versions, missing critical packages, and integrity drift', () => {

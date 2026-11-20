@@ -6,6 +6,12 @@ required CI job `dependency-scan`). This page is the maintenance contract for th
 本仓库通过失败关闭的依赖告警门禁（`scripts/audit_dependencies.py`，必需 CI job
 `dependency-scan`）检查依赖公告。本文是该门禁的维护说明。
 
+## 0.13.3 candidate / 0.13.3 候选
+
+The rc.5 dependency graph still includes `undici@8.11.2`. The previously approved exceptions identify Guard 0.13.2 and earlier versions and end on 2026-11-30 inclusive. The 0.13.3 candidate must pass its own dependency scan and resolve any blocking findings before publication.
+
+rc.5 依赖图仍包含 `undici@8.11.2`。此前已批准的例外适用于 Guard 0.13.2 及更早版本，期限截至 2026-11-30（含）。0.13.3 候选须完成本版依赖扫描并在发版前处理阻断项。
+
 ## Policy / 策略
 
 - Any `high` or `critical` advisory — production or development chain — fails the gate.

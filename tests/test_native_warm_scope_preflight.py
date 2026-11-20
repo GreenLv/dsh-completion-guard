@@ -36,6 +36,13 @@ class PreflightTests(unittest.TestCase):
         platform = patch.object(module, "sys", SimpleNamespace(platform="darwin"))
         platform.start(); self.addCleanup(platform.stop)
 
+    def test_other_cohort_refuses_before_accessing_artifact_or_host(self):
+        args=module.argparse.Namespace(repo_root=Path('.'), runtime_root=Path('.'), artifact=Path('missing'), source_commit='a'*40, artifact_sha256='b'*64, web_cohort='dsh-0.2.2-rc.3-core-v1', headless_cohort='dsh-0.2.2-rc.5-core-v1')
+        with patch.object(module.host, 'preflight_host_inputs') as host_inputs:
+            result=module.check(args)
+        self.assertEqual((result['status'], result['stage']), ('failed', 'host_cohort'))
+        host_inputs.assert_not_called()
+
     def test_driver_covers_local_probe_imports(self):
         bound=set(module.FILES)
         for name in module.FILES:
@@ -48,7 +55,7 @@ class PreflightTests(unittest.TestCase):
         with test_directory() as root:
             repo=root/'repo'; runtime=root/'runtime';repo.mkdir();runtime.mkdir()
             artifact=root/'input.tgz';artifact.write_bytes(b'fixture')
-            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,source_commit='a'*40,artifact_sha256='b'*64)
+            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,source_commit='a'*40,artifact_sha256='b'*64,web_cohort='dsh-0.2.2-rc.5-core-v1',headless_cohort='dsh-0.2.2-rc.5-core-v1')
             with patch.object(module.sys,'platform','linux'),patch.object(module.host,'preflight_host_inputs') as host_inputs:
                 result=module.check(args)
             self.assertEqual((result['status'],result['stage']),('failed','platform'))
@@ -76,7 +83,7 @@ class PreflightTests(unittest.TestCase):
     def test_artifact_read_failure_does_not_claim_acceptance(self):
         with test_directory() as tmp:
             root=Path(tmp); repo=root / "repo"; runtime=root / "runtime"; repo.mkdir(); runtime.mkdir()
-            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=root / "a",artifact_sha256="b"*64,source_commit="a"*40,web_cohort="0.2.1-rc.5",headless_cohort="0.2.1-rc.5")
+            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=root / "a",artifact_sha256="b"*64,source_commit="a"*40,web_cohort="dsh-0.2.2-rc.5-core-v1",headless_cohort="dsh-0.2.2-rc.5-core-v1")
             args.artifact.write_bytes(b"x")
             with patch.object(module.native,"verify_exact_source"), patch.object(module.native,"sha256",return_value="b"*64), patch.object(module.tarfile,"open",side_effect=PermissionError("sensitive path")):
                 result=module.check(args)
@@ -86,11 +93,11 @@ class PreflightTests(unittest.TestCase):
         with test_directory() as tmp:
             root=Path(tmp); repo=root / "repo"; runtime=root / "runtime"; repo.mkdir(); runtime.mkdir()
             artifact=root / "a"; artifact.write_bytes(b"x")
-            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,artifact_sha256="b"*64,source_commit="a"*40,web_cohort="0.2.1-rc.5",headless_cohort="0.2.1-rc.5")
+            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,artifact_sha256="b"*64,source_commit="a"*40,web_cohort="dsh-0.2.2-rc.5-core-v1",headless_cohort="dsh-0.2.2-rc.5-core-v1")
             member=MagicMock(); member.name="package/package.json"; member.isfile.return_value=True; member.size=10
             archive=MagicMock(); archive.getmembers.return_value=[member]; archive.getmember.return_value=member
             archive.extractfile.return_value=io.BytesIO(json.dumps({"name":"dsh-completion-guard","gitHead":"a"*40}).encode())
-            with patch.object(module.native,"verify_exact_source"), patch.object(module.native,"sha256",return_value="b"*64), patch.object(module.tarfile,"open") as opened, patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.2-rc.3"},{})), patch.object(module.native,"resolve_executable"), patch.object(module.host,"preflight_execution_access",side_effect=PermissionError("private")):
+            with patch.object(module.native,"verify_exact_source"), patch.object(module.native,"sha256",return_value="b"*64), patch.object(module.tarfile,"open") as opened, patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.2-rc.5"},{})), patch.object(module.native,"resolve_executable"), patch.object(module.host,"preflight_execution_access",side_effect=PermissionError("private")):
                 opened.return_value.__enter__.return_value=archive
                 result=module.check(args)
             self.assertEqual(result["status"],"failed"); self.assertEqual(result["stage"],"child_and_process_query")
@@ -99,7 +106,7 @@ class PreflightTests(unittest.TestCase):
         with test_directory() as tmp:
             root=Path(tmp); repo=root / "repo"; runtime=root / "runtime"; repo.mkdir(); runtime.mkdir()
             artifact=root / "a"; artifact.write_bytes(b"x")
-            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,artifact_sha256="b"*64,source_commit="a"*40,web_cohort="current",headless_cohort="current")
+            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,artifact_sha256="b"*64,source_commit="a"*40,web_cohort="dsh-0.2.2-rc.5-core-v1",headless_cohort="dsh-0.2.2-rc.5-core-v1")
             member=MagicMock(); member.name="package/package.json"; member.isfile.return_value=True; member.size=10
             archive=MagicMock(); archive.getmembers.return_value=[member]; archive.getmember.return_value=member
             archive.extractfile.return_value=io.BytesIO(json.dumps({"name":"dsh-completion-guard","gitHead":"a"*40}).encode())

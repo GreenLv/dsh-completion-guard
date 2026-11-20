@@ -202,7 +202,8 @@ try {
   const match = /^package ((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*@[0-9A-Za-z.+-]{1,80})(?::|$)/u.exec(raw)
   const member = /^package [^:]+: member '([^']{1,180})' /u.exec(raw)?.[1]
   const safeMember = member && /^[A-Za-z0-9_@./+-]+$/u.test(member) && !member.startsWith('/') && !member.split('/').includes('..') ? member : undefined
-  const detail = match ? { package: match[1], ...(safeMember ? { member: safeMember } : {}) } : undefined
+  const phase = /^package [^:]+: (metadata|archive) request failed$/u.exec(raw)?.[1]
+  const detail = match ? { package: match[1], ...(safeMember ? { member: safeMember } : {}), ...(phase ? { phase } : {}) } : undefined
   process.exitCode = 1
   try { await writeOutput(process.stderr, `${JSON.stringify({ status: 'unavailable', reason_code: code, ...(detail ? { detail } : {}) })}\n`) } catch { /* A closed diagnostic pipe still fails. */ }
 }

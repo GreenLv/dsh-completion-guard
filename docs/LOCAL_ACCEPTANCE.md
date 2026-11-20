@@ -1,7 +1,13 @@
 # Acceptance contracts and records
 
-The first section defines the checks for the 0.13.2 host update. Later sections describe older versions and their evidence. Use the instructions and results for the exact source and package under review.
+The first section defines the checks for the 0.13.3 host update. Later sections describe older versions and their evidence. Use the instructions and results for the exact source and package under review.
 
+
+## 0.13.3 / DSH 0.2.2-rc.5 candidate contract
+
+The minimum host remains `0.2.2-rc.3`; rc.5 is the default reviewed graph. The candidate must pass the complete applicable historical library before formal acceptance. Bind CI to the exact final commit. Test macOS arm64 and Windows x64 Web, Headless and official Desktop with the same frozen package, including the 0.13.2 predecessor, none/zstd persistence, refusal controls, cleanup and Desktop v2 no-op gates. Registry identity, source qualification, native execution and installed runtime loading are separate evidence.
+
+最低宿主仍为 `0.2.2-rc.3`，rc.5 为默认审查包图。候选先通过完整适用历史错误库，再进入正式验收。CI 绑定最终提交，macOS arm64 和 Windows x64 的 Web、Headless、官方 Desktop 使用同一冻结包，覆盖 0.13.2 前驱、普通和 zstd 持久化、拒绝控制、清理及 Desktop v2 两层 no-op。registry 身份、源码资格、原生运行和实际加载分别记录。
 
 ## 0.13.2 / DSH 0.2.2-rc.3 candidate contract
 

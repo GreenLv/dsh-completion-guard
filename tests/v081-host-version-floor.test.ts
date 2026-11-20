@@ -125,7 +125,7 @@ describe('0.13.2 floor-admission host version policy', () => {
     const rebound = evaluateGraphDerivedHostLock(rows, { platform: 'posix', profileKind: 'web' }, () => true)
     expect(rebound.status).toBe('unsupported')
     expect(rebound.reasonCode).toBe('host_lock_version_below_minimum')
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.3-core-v1'])
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.5-core-v1', 'dsh-0.2.2-rc.3-core-v1'])
   })
 
   it('the floor SemVer matrix matches the recorded consumer evidence', () => {

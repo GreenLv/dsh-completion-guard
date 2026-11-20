@@ -330,6 +330,39 @@
       "releaseSha512": "GiJf8kx+C7eoiZ0xQSYBcTyh5xmXQl+vh63U6uSm963McK1AkMgB8PydzuekWdUY7hyURvhVMHANM4pn+tCKzQ==",
       "vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd.",
       "files": []
+    },
+    {
+      "id": "desktop-0.2.2-rc.5-darwin-arm64",
+      "platform": "darwin",
+      "arch": "arm64",
+      "asarHeaderSha256": "c2e8c43521f5d6c5ea10142580aa171814623bcf52427f6bc351a9b551478506",
+      "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.2-rc.5-mac-arm64.zip",
+      "releaseSha512": "28C1+oaRcSjOwWvzqjXA4Cpic7bvTs++wOu3moAfRQMLhTPZv40G3GQTir0wuyuPGh/PsQH0ykb/qJD4pnWMxA==",
+      "vendorTeam": "NAN929V4UM",
+      "vendorIdentifier": "com.deepseek.dsh",
+      "version": "0.2.2-rc.5",
+      "runtimeVersion": "0.2.2-rc.5",
+      "pnpmVersion": "11.28.5",
+      "desktopManifestSha256": "38ce2c1baf343d76d6f36106dd9f7475655b2e1eb09a63b2e9fd347406a5d78f",
+      "buildCommit": "3f85d888b1297107937d9bd5b853f7e733e179a4",
+      "buildDirty": false,
+      "files": []
+    },
+    {
+      "id": "desktop-0.2.2-rc.5-win32-x64",
+      "platform": "win32",
+      "arch": "x64",
+      "asarHeaderSha256": "352f8181b52c0c68f02a7f122355586b1a142a9bef3ba63cb113a7728e41e3d0",
+      "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.2-rc.5-win-x64.exe",
+      "releaseSha512": "wWySRp7Hk5gcH324jBxAc7KV0mniHzQDofyQexOJMIAWXBkgHTsRCr3IrdwX1XO8OIhDZsLYmve4mLxskikYIg==",
+      "vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd.",
+      "version": "0.2.2-rc.5",
+      "runtimeVersion": "0.2.2-rc.5",
+      "pnpmVersion": "11.28.5",
+      "desktopManifestSha256": "38ce2c1baf343d76d6f36106dd9f7475655b2e1eb09a63b2e9fd347406a5d78f",
+      "buildCommit": "3f85d888b1297107937d9bd5b853f7e733e179a4",
+      "buildDirty": false,
+      "files": []
     }
   ]
 }
