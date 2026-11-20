@@ -110,8 +110,8 @@
     },
     "gates": {
       "type": "array",
-      "minItems": 32,
-      "maxItems": 32,
+      "minItems": 33,
+      "maxItems": 33,
       "items": {
         "type": "object",
         "required": [
@@ -157,7 +157,8 @@
               "t06_owned_handle_cleanup",
               "desktop_v070_archive043_git_chain",
               "desktop_v070_archive044_pending_followup",
-              "desktop_v131_predecessor_activation_restore"
+              "desktop_v131_predecessor_activation_restore",
+              "desktop_v132_predecessor_activation_restore"
             ]
           },
           "required": {
@@ -652,6 +653,21 @@
             "properties": {
               "id": {
                 "const": "desktop_v131_predecessor_activation_restore"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "desktop_v132_predecessor_activation_restore"
               }
             }
           },

@@ -112,8 +112,8 @@
     },
     "gates": {
       "type": "array",
-      "minItems": 34,
-      "maxItems": 34,
+      "minItems": 35,
+      "maxItems": 35,
       "items": {
         "type": "object",
         "required": [
@@ -161,7 +161,8 @@
               "desktop_market_api",
               "desktop_market_v070_archive043_git_chain",
               "desktop_market_v070_archive044_pending_followup",
-              "desktop_market_v131_predecessor_activation_restore"
+              "desktop_market_v131_predecessor_activation_restore",
+              "desktop_market_v132_predecessor_activation_restore"
             ]
           },
           "required": {

@@ -14,7 +14,7 @@ python -c "import sys; from pathlib import Path; sys.path.insert(0, 'scripts'); 
 
 Calculate the digest on each host from its actual checkout bytes; line-ending conversion can produce different digests across checkouts.
 
-Run `scripts/native_warm_acceptance.py` with `--repo-root`, `--runtime-root`, `--artifact`, `--artifact-sha256`, `--source-commit`, `--driver-sha256`, and an unused external `--output`. First add `--preflight`. Use a different unused output path when running without `--preflight`; an existing result is never overwritten. The default Web and Headless cohort is `dsh-0.2.2-rc.2-core-v1`; pass explicit `--web-cohort` and `--headless-cohort` to select another declared cohort.
+Run `scripts/native_warm_acceptance.py` with `--repo-root`, `--runtime-root`, `--artifact`, `--artifact-sha256`, `--source-commit`, `--driver-sha256`, and an unused external `--output`. First add `--preflight`. Use a different unused output path when running without `--preflight`; an existing result is never overwritten. The Web and Headless cohort defaults to `dsh-0.2.2-rc.5-core-v1`; this driver accepts only that cohort.
 
 The host's patch format cannot replace an entry's `name`. The runner therefore disables the installed Guard entry and inserts one wrapper. It checks the actual composed entries for one disabled original and one active wrapper. For the existing host-lock consumer only, it constructs a read-only view with the independently verified wrapper id and name replaced by the consumer's expected names; the wrapper's actual configuration lines are preserved. The wrapper imports the installed Guard and supplies only a local registry response, a counter-only publish effect, and an audit observer. It does not supply a fixed host lock.
 

@@ -90,6 +90,12 @@ class T06Contracts(unittest.TestCase):
                 for mutate in (lambda v:v['gates'].pop(),lambda v:v['gates'][0].update(id=v['gates'][1]['id']),
                                lambda v:v['gates'][-1].update(id='unknown'),lambda v:v['gates'][-1].update(status='failed')):
                     changed=copy.deepcopy(ext);mutate(changed);self.assertFalse(validator.is_valid(changed))
+                for prefix in (('desktop',) if kind=='desktop' else ('web','headless')):
+                    gate=prefix+'_v132_predecessor_activation_restore'
+                    changed=copy.deepcopy(ext)
+                    index=next(i for i,row in enumerate(changed['gates']) if row['id']==gate)
+                    changed['gates'][index]=copy.deepcopy(changed['gates'][0])
+                    self.assertFalse(validator.is_valid(changed), gate)
 
     def test_producers_declare_selected_profile_before_failure_return(self):
         with tempfile.TemporaryDirectory() as directory:

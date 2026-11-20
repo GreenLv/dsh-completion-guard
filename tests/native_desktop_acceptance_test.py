@@ -59,6 +59,20 @@ class DesktopEntrypointTests(unittest.TestCase):
                 if "enum" in identifiers:
                     self.assertEqual(set(identifiers["enum"]), produced)
                     self.assertEqual(len(identifiers["enum"]), len(produced))
+        for name, expected in (("native-desktop-bound-v2-t06", desktop.DESKTOP_GATES),
+                               ("native-host-bound-v4-t06", host_gates)):
+            with self.subTest(contract=name):
+                gates = json.loads((root / "schemas" / (name + ".schema.json")).read_text())["properties"]["gates"]
+                required = expected | {"t06_owned_handle_cleanup"}
+                self.assertEqual(gates["minItems"], len(required))
+                self.assertEqual(gates["maxItems"], len(required))
+                identifiers = gates["items"]["properties"]["id"]["enum"]
+                self.assertEqual(set(identifiers), required)
+                self.assertEqual(len(identifiers), len(required))
+                contains = [entry["contains"]["properties"]["id"]["const"] for entry in gates["allOf"]]
+                self.assertEqual(set(contains), required)
+                self.assertEqual(len(contains), len(required))
+                self.assertTrue(all(entry["minContains"] == entry["maxContains"] == 1 for entry in gates["allOf"]))
         # The shared probe is the actual Host producer; its emitted cases feed
         # both Web and Headless as well as Desktop and Market consumers.
         driver = (root / "scripts/native_host_probe_v070.mjs").read_text()

@@ -1214,6 +1214,11 @@ class HostBoundEntrypointTests(unittest.TestCase):
         self.assertFalse(validate({**receipt, "schema": "dsh-native-host-probe/v1"}))
         self.assertFalse(validate({**receipt, "cases": cases[:-1]}))
         self.assertFalse(validate({**receipt, "cases": cases + [cases[0]]}))
+        predecessor = "v132_predecessor_activation_restore"
+        without_predecessor = [row for row in cases if row["id"] != predecessor]
+        self.assertEqual(len(without_predecessor), len(cases) - 1)
+        self.assertFalse(validate({**receipt, "cases": without_predecessor}))
+        self.assertFalse(validate({**receipt, "cases": without_predecessor + [without_predecessor[0]]}))
         self.assertFalse(validate({**receipt, "cases": [{**cases[0], "negative": False}, *cases[1:]]}))
         self.assertFalse(validate({**receipt, "cases": [{**cases[0], "positive": False}, *cases[1:]]}))
         self.assertFalse(validate({**receipt, "cases": [{**cases[0], "status": "failed"}, *cases[1:]]}))
