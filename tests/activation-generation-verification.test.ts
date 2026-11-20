@@ -15,6 +15,9 @@ const { Context } = await import(pathToFileURL(require.resolve('@deepseek-ai/cor
 const backend = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href)
 const { historicalSessionFormatCatalog, sessionFormatCatalog } = await import(pathToFileURL(backendRequire.resolve('@deepseek-ai/dsh-session-format-catalog')).href)
 const roots: string[] = []
+// Windows verification invokes several bounded PowerShell ACL checks per call.
+// Keep the normal Vitest timeout on other platforms.
+const windowsAclTimeout = process.platform === 'win32' ? 30_000 : undefined
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, {recursive: true, force: true}) })
 async function openSnapshot(root: string, compression: 'none'|'zstd') {
   const context = new Context(); const child = context.plugin(backend.default ?? backend, {root, compression}); await child.await()
@@ -86,22 +89,22 @@ describe('SDK generation verification',()=>{
   expect(observed).toHaveLength(1);expect(observed[0]).toMatch(/^dsh-generation-check-/u)
   expect(readdirSync(base)).toEqual([])
   expect(foreign).toBeDefined();expect(readFileSync(join(foreign!,'owner'),'utf8')).toBe('another invocation')
- })
+ },windowsAclTimeout)
  it('rejects a linked generation rather than following it',async()=>{
   const f=await fixture('none'), path=join(f.dir,'session.v1.jsonl'), bytes=readFileSync(path);rmSync(path);const other=join(f.root,'other');writeFileSync(other,bytes);try { symlinkSync(other,path,'file') } catch (error) { if (process.platform !== 'win32' || !['EPERM','EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error; linkSync(other,path) }
   await expect(verifyActivationGenerations(f.args)).rejects.toThrow()
- })
+ },windowsAclTimeout)
  it('refuses a scratch base inside source even through a symlink before copying',async()=>{
   const f=await fixture('none'), link=join(f.root,'scratch-link');symlinkSync(f.root,link,process.platform==='win32'?'junction':'dir')
   const variables=process.platform==='win32'?['TEMP','TMP']:['TMPDIR'];const previous=variables.map(key=>process.env[key])
   try { for(const key of variables)process.env[key]=link;await expect(verifyActivationGenerations(f.args)).rejects.toThrow() }
   finally { variables.forEach((key,i)=>{if(previous[i]===undefined)delete process.env[key];else process.env[key]=previous[i]}) }
   expect(readdirSync(f.root).filter(name=>name.startsWith('dsh-generation-check-'))).toEqual([])
- })
+ },windowsAclTimeout)
  it('rejects changed census after the snapshot is copied',async()=>{
   const f=await fixture('none');let calls=0;f.args.capture=()=>++calls===1?f.args.censusSha256:'b'.repeat(64)
   await expect(verifyActivationGenerations(f.args)).rejects.toThrow('activation_generation_unverified')
- })
+ },windowsAclTimeout)
 
  it('keeps single-generation SDK cases outside strict verification',async()=>{
   const f=await fixture('none');f.args.generations=f.args.generations.filter(x=>x.version===4);f.args.openSnapshot=async()=>{throw new Error('must not open')};
@@ -110,7 +113,7 @@ describe('SDK generation verification',()=>{
  it('refuses future versions and changed source identity',async()=>{
   const f=await fixture('none');f.args.generations[0].version=5;await expect(verifyActivationGenerations(f.args)).rejects.toThrow()
   f.args.generations=descriptors(f.root,'none');writeFileSync(join(f.dir,'session.v1.jsonl'),'changed after census\n');await expect(verifyActivationGenerations(f.args)).rejects.toThrow()
- })
+ },windowsAclTimeout)
  it('leaves the original multi-generation files byte-identical after verification',async()=>{
   const f=await fixture('none');const before=f.args.generations.map(g=>[g.relativePath,readFileSync(join(f.root,g.relativePath)).toString('hex')])
   await verifyActivationGenerations(f.args);for(const [path,hex] of before)expect(readFileSync(join(f.root,path)).toString('hex')).toBe(hex)
@@ -131,7 +134,7 @@ describe('SDK generation verification',()=>{
    return {...result,persistence:{stat:async(id:never)=>{const row=await service.stat(id);return row?{...row,revision:`bad:${row.revision}`} : row},open:(id:never,access:'read')=>service.open(id,access)}}
   }
   await expect(verifyActivationGenerations(f.args)).rejects.toThrow('activation_generation_unverified')
- })
+ },windowsAclTimeout)
 
  it.skipIf(process.platform !== 'win32')('allows a readable base only after the selected scratch has a protected private ACL',async()=>{
   const f=await fixture('none'), base=realpathSync(mkdtempSync(join(tmpdir(),'dsh-readable-acl-')));roots.push(base)
